@@ -177,7 +177,7 @@
 
     {#if html.trim()}
       <div class="prose">
-        <!-- Sanitised by the server (src/lib/render/markdown.ts): raw HTML is escaped. -->
+        <!-- Sanitised by the server (src/server/render/markdown.ts): raw HTML is escaped. -->
         <!-- eslint-disable-next-line svelte/no-at-html-tags -->
         {@html html}
       </div>

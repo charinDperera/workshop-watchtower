@@ -41,7 +41,12 @@ FROM ${NODE_IMAGE} AS runtime
 # security rebuilds such as -r1 installable; Alpine drops superseded revisions).
 # npm, npx, yarn and corepack are removed: nothing at runtime uses them, and they would only
 # add attack surface and scanner findings.
-RUN apk add --no-cache 'git~2.54' \
+#
+# zlib: the base ships 1.3.2-r0 (ALPINE-CVE-2026-85091, heap buffer overflow, High), fixed
+# in 1.3.2-r1. The constraint upgrades it and fails the build if the fix is unavailable.
+# TEMPORARY: remove the zlib constraint once the pinned node base digest ships zlib >= 1.3.2-r1
+# (checked 2026-10-17: node:24.22.0-alpine3.24 / 24-alpine still sha256:44fce696..., zlib r0).
+RUN apk add --no-cache 'git~2.54' 'zlib>=1.3.2-r1' \
  && rm -rf /usr/local/lib/node_modules/npm /usr/local/lib/node_modules/corepack \
            /usr/local/bin/npm /usr/local/bin/npx /usr/local/bin/corepack \
            /usr/local/bin/yarn /usr/local/bin/yarnpkg /opt/yarn-*

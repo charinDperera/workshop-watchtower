@@ -1,4 +1,4 @@
-import { mkdirSync, writeFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { buildSnapshot } from '../../src/server/services/build-snapshot';
@@ -332,6 +332,36 @@ describe('git adapter', () => {
     const git = fakeGit({});
     expect((await readRepoState(git, temp.dir, 'apps/x')).isRepo).toBe(false);
     expect(git.calls).toEqual([]);
+  });
+});
+
+describe('record revision', () => {
+  it('changes when only the body of a record changes, so a new snapshot goes out', async () => {
+    const ws = copyFixture();
+    try {
+      const path = 'limforia/chronicles/2026-10-01-first.md';
+      const build = () =>
+        buildSnapshot({ fs: createWorkstationFs(ws.dir), git: fakeGit({}), now: () => 0 });
+      const before = await build();
+      const again = await build();
+      const file = join(ws.dir, ...path.split('/'));
+      writeFileSync(file, `${readFileSync(file, 'utf8')}\n\nLIVE-EDIT-MARKER\n`);
+      const after = await build();
+      const record = (s: Awaited<ReturnType<typeof build>>) =>
+        s.records.find((r) => r.path === path);
+      // Stable for unchanged text, so identical rebuilds are still not re-sent.
+      expect(record(again)?.revision).toBe(record(before)?.revision);
+      expect(record(before)?.revision).toMatch(/^[0-9a-f]{16}$/);
+      // The body changed; title and header did not, yet the record (and the snapshot) did.
+      expect(record(after)?.title).toBe(record(before)?.title);
+      expect(record(after)?.header).toEqual(record(before)?.header);
+      expect(record(after)?.revision).not.toBe(record(before)?.revision);
+      const print = (s: Awaited<ReturnType<typeof build>>) =>
+        JSON.stringify({ ...s, generatedAt: '' });
+      expect(print(after)).not.toBe(print(before));
+    } finally {
+      ws.cleanup();
+    }
   });
 });
 

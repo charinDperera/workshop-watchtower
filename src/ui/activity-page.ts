@@ -1,6 +1,6 @@
 /**
  * The activity timeline's filters and links (`/activity?agent=&event=&before=`). Pure.
- * Paging itself is Paul's (`GET /api/activity`, `src/lib/derive/activity-history.ts`); these
+ * Paging itself is Paul's (`GET /api/activity`, `src/server/services/activity-history.ts`); these
  * helpers only read the page's query and build its links. Owner: Luka.
  */
 import { parseIsoTimestamp } from '../shared/iso-time';
@@ -37,7 +37,7 @@ export interface ParsedActivityFilter {
   ignored: string[];
 }
 
-/** Same shape as the API accepts (`src/lib/http/activity-query.ts`). */
+/** Same shape as the API accepts (`src/server/schemas/activity-query.ts`). */
 const SLUG = /^[a-z0-9][a-z0-9._:-]{0,199}$/;
 
 export function parseActivityFilter(params: URLSearchParams): ParsedActivityFilter {

@@ -85,6 +85,7 @@ function record(
     headerProblems: [],
     isTemplate: false,
     inCatalog: true,
+    revision: '0000000000000000',
     ...rest,
   };
 }

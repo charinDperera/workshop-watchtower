@@ -6,7 +6,13 @@
 import { mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
-import { createLogger, DailyFile, REQUEST_ID, resolveRequestId } from '../../scripts/logger.mjs';
+import {
+  createLogger,
+  DailyFile,
+  REQUEST_ID,
+  requestLogLevel,
+  resolveRequestId,
+} from '../../scripts/logger.mjs';
 import { AppError, BadRequestError } from '../../src/server/errors/app-error';
 import { toErrorResponse } from '../../src/server/errors/route';
 import { getActivity } from '../../src/server/handlers/activity';
@@ -387,6 +393,23 @@ describe('logging', () => {
     const text = log.lines.join('');
     expect(text).not.toContain('SECRET');
     expect(text).toContain('[redacted]');
+  });
+
+  it('logs the Docker health check quietly, and nothing else', () => {
+    expect(requestLogLevel('GET', '/api/health', 200)).toBe('debug');
+    expect(requestLogLevel('HEAD', '/api/health', 200)).toBe('info');
+    expect(requestLogLevel('GET', '/api/health', 403)).toBe('info');
+    expect(requestLogLevel('GET', '/api/health', 500)).toBe('info');
+    expect(requestLogLevel('GET', '/api/healthz', 200)).toBe('info');
+    expect(requestLogLevel('GET', '/api/snapshot', 200)).toBe('info');
+    // At debug level the line is there, with the usual fields.
+    const log = capture('debug');
+    const level = requestLogLevel('GET', '/api/health', 200);
+    const fields = { method: 'GET', route: '/api/health', status: 200, durationMs: 1 };
+    log.forRequest('req-health01')[level]('request.completed', 'Request completed', fields);
+    expect(log.entries()).toMatchObject([
+      { level: 'debug', event: 'request.completed', route: '/api/health' },
+    ]);
   });
 
   it('honours the level', () => {

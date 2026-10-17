@@ -137,3 +137,16 @@ export const REQUEST_ID = /^[A-Za-z0-9_-]{8,64}$/;
 export function resolveRequestId(incoming, generate = () => crypto.randomUUID()) {
   return typeof incoming === 'string' && REQUEST_ID.test(incoming) ? incoming : generate();
 }
+
+/** Routes polled by machines (the Docker HEALTHCHECK every 30 s): logged quietly when fine. */
+export const QUIET_ROUTES = Object.freeze(['/api/health']);
+
+/**
+ * The level of a `request.completed` line: `debug` for a successful GET of a quiet route
+ * (about 2,880 health checks a day would otherwise drown the log), `info` for the rest.
+ * Refusals are logged separately at `warn` either way.
+ * @param {string | undefined} method @param {string} route @param {number} status
+ */
+export function requestLogLevel(method, route, status) {
+  return method === 'GET' && QUIET_ROUTES.includes(route) && status < 400 ? 'debug' : 'info';
+}

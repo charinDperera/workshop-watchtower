@@ -2,7 +2,7 @@
 // static files included: request id, security headers, the same guard as the Astro
 // middleware, URL check, static file or Astro, and one log line when the response ends.
 
-import { resolveRequestId } from './logger.mjs';
+import { requestLogLevel, resolveRequestId } from './logger.mjs';
 import { FALLBACK_CSP, guardRequest, SECURITY_HEADERS } from './request-guard.mjs';
 
 export const REQUEST_ID_HEADER = 'x-request-id';
@@ -35,7 +35,7 @@ const routeOf = (url) => (url ?? '/').split(/[?#]/, 1)[0];
  *   policy: { allowedHosts: readonly string[], isTrustedPeer(address: string): boolean },
  *   serveStatic: (req: import('node:http').IncomingMessage, res: import('node:http').ServerResponse) => Promise<boolean>,
  *   app: (req: import('node:http').IncomingMessage, res: import('node:http').ServerResponse, next?: unknown, locals?: object) => unknown,
- *   logger: { forRequest(requestId: string): { info: Function, warn: Function, error: Function } },
+ *   logger: { forRequest(requestId: string): { debug: Function, info: Function, warn: Function, error: Function } },
  *   now?: () => number,
  * }} deps
  */
@@ -55,12 +55,17 @@ export function createRequestListener({
     setSecurityHeaders(res);
     const log = logger.forRequest(requestId);
     res.once('close', () => {
-      log.info('request.completed', 'Request completed', {
-        method: req.method,
-        route: routeOf(req.url),
-        status: res.statusCode,
-        durationMs: Math.round(now() - started),
-      });
+      const route = routeOf(req.url);
+      log[requestLogLevel(req.method, route, res.statusCode)](
+        'request.completed',
+        'Request completed',
+        {
+          method: req.method,
+          route,
+          status: res.statusCode,
+          durationMs: Math.round(now() - started),
+        },
+      );
     });
 
     const host = typeof req.headers.host === 'string' ? req.headers.host : null;

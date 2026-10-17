@@ -2,7 +2,7 @@
 // the Node server in `scripts/start.mjs`, which checks every request before anything is
 // served (static files included), and the Astro middleware (`src/middleware.ts`), which
 // checks again in production and is the only check under `astro dev`.
-// Typed facade for the app: `src/lib/security/request-guard.ts`.
+// Typed facade for the app: `src/server/security/request-guard.ts`.
 
 import { createClientMatcher } from './server-env.mjs';
 

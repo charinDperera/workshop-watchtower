@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { posix } from 'node:path';
 import type { ArchiveRecord, RecordHeader, WingId } from '../../../shared/types';
 import { PATHS, RECORD_STATUSES, RECORD_TYPES } from '../../constants';
@@ -97,6 +98,11 @@ const EMPTY_HEADER: RecordHeader = {
 };
 
 /** Parses one archive record. `inCatalog` is filled in later by the snapshot builder. */
+/** A short, stable fingerprint of a file's text (16 hex digits of SHA-256). */
+export function revisionOf(text: string): string {
+  return createHash('sha256').update(text, 'utf8').digest('hex').slice(0, 16);
+}
+
 export function parseRecord(path: string, text: string): ArchiveRecord {
   const front = splitFrontmatter(text);
   const { wing, subWing } = classifyPath(path);
@@ -122,6 +128,7 @@ export function parseRecord(path: string, text: string): ArchiveRecord {
     headerProblems,
     isTemplate: wing === 'templates',
     inCatalog: false,
+    revision: revisionOf(text),
   };
 }
 

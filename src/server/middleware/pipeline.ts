@@ -6,6 +6,7 @@
  */
 import { envStatus } from '../config/env';
 import { errorResponse } from '../errors/responses';
+import { requestLogLevel } from '../logging/logger';
 import { createRequestPolicy, guardRequest, type GuardPolicy } from '../security/request-guard';
 import { attachRequestContext, clientAddressOf, REQUEST_ID_HEADER } from './request-context';
 import { withSecurityHeaders } from './security-headers';
@@ -65,12 +66,17 @@ export async function handleRequest(
 
   response = withSecurityHeaders(response, { [REQUEST_ID_HEADER]: requestId });
   if (!context.locals.edgeLogged) {
-    log.info('request.completed', 'Request completed', {
-      method: context.request.method,
-      route: context.routePattern ?? context.url.pathname,
-      status: response.status,
-      durationMs: Math.round(performance.now() - started),
-    });
+    const route = context.url.pathname;
+    log[requestLogLevel(context.request.method, route, response.status)](
+      'request.completed',
+      'Request completed',
+      {
+        method: context.request.method,
+        route: context.routePattern ?? route,
+        status: response.status,
+        durationMs: Math.round(performance.now() - started),
+      },
+    );
   }
   return response;
 }

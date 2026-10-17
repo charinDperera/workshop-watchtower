@@ -283,6 +283,11 @@ export interface ArchiveRecord {
   isTemplate: boolean;
   /** Present in `CATALOG.md` (always false for intel and templates). */
   inCatalog: boolean;
+  /**
+   * Changes whenever the file's text changes (a short content hash), so an edit to the body
+   * alone still changes the snapshot and the live record viewer refetches.
+   */
+  revision: string;
 }
 
 export interface WingSummary {

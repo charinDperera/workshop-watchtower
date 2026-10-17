@@ -37,6 +37,15 @@ export const REDACT_PATHS: readonly string[] = impl.REDACT_PATHS;
 export const REQUEST_ID: RegExp = impl.REQUEST_ID;
 export const resolveRequestId: (incoming: unknown, generate?: () => string) => string =
   impl.resolveRequestId;
+export const requestLogLevel: (
+  method: string | undefined,
+  route: string,
+  status: number,
+) => 'debug' | 'info' = impl.requestLogLevel as (
+  method: string | undefined,
+  route: string,
+  status: number,
+) => 'debug' | 'info';
 
 function fromEnv(service: string): LoggerPair {
   const status = envStatus();

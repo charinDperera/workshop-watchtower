@@ -239,6 +239,25 @@ describe('Node request listener (start.mjs)', () => {
     expect(JSON.stringify(lines)).not.toContain('token');
   });
 
+  it('logs a successful health check at debug, not info; a refused one still warns', async () => {
+    logged.length = 0;
+    await get('/api/health', undefined, 'GET', { 'x-request-id': 'health-ok-00001' });
+    await get('/api/health', 'evil.test:4321', 'GET', { 'x-request-id': 'health-bad-0001' });
+    await get('/host', undefined, 'GET', { 'x-request-id': 'not-health-0001' });
+    await new Promise((r) => setTimeout(r, 20));
+    const of = (id: string) =>
+      entries()
+        .filter((e) => e.requestId === id)
+        .map((e) => [e.level, e.event]);
+    // The capture logger is at info, so the debug line is not written at all.
+    expect(of('health-ok-00001')).toEqual([]);
+    expect(of('health-bad-0001')).toEqual([
+      ['warn', 'request.refused'],
+      ['info', 'request.completed'],
+    ]);
+    expect(of('not-health-0001')).toEqual([['info', 'request.completed']]);
+  });
+
   it('logs a refusal as a warning, without the peer address', async () => {
     logged.length = 0;
     await get('/favicon.svg', 'evil.test:4321', 'GET', { 'x-request-id': 'refused-0000001' });
