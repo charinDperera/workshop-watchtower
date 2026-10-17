@@ -37,6 +37,16 @@ export const E2E_HOST = `127.0.0.1:${E2E_PORT}`;
 /** The e2e server's LOG_DIR (bff/ and client/ JSONL files), emptied for every run. */
 export const E2E_LOG_DIR = join(E2E_BASE, 'logs');
 
+/**
+ * A second e2e server on the same workstation, as if behind the gateway: it has
+ * WATCHTOWER_PUBLIC_ORIGIN set (the main server has it unset). HTTP-level tests only.
+ */
+export const GATEWAY_PORT = 4398;
+export const GATEWAY_LOCAL_HOST = `127.0.0.1:${GATEWAY_PORT}`;
+export const PUBLIC_ORIGIN = 'https://watchtower.e2e.test';
+export const PUBLIC_HOST = 'watchtower.e2e.test';
+export const GATEWAY_LOG_DIR = join(E2E_BASE, 'logs-gateway');
+
 /** Older events seeded into the rotated log: Uriel searching, two per second apart. */
 export const SEEDED_EVENTS = 60;
 export const SEEDED_AGENT = 'uriel';
@@ -91,8 +101,10 @@ export function prepareWorkstation(root: string = DEFAULT_ROOT): string {
   }
   rmSync(target, { recursive: true, force: true });
   rmSync(OUTSIDE_DIR, { recursive: true, force: true });
-  rmSync(E2E_LOG_DIR, { recursive: true, force: true });
-  mkdirSync(E2E_LOG_DIR, { recursive: true });
+  for (const dir of [E2E_LOG_DIR, GATEWAY_LOG_DIR]) {
+    rmSync(dir, { recursive: true, force: true });
+    mkdirSync(dir, { recursive: true });
+  }
   mkdirSync(target, { recursive: true });
   cpSync(FIXTURE, target, { recursive: true });
 

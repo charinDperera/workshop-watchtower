@@ -17,38 +17,55 @@ pnpm start
 address is fixed); the port is `4321` unless `PORT` sets another.
 Do not start `dist/server/entry.mjs` directly: it no longer starts a server.
 
-### In Docker
+### In Docker, behind the workshop gateway
+
+The container is reached only through the workshop gateway (`infra/gateway/`), at
+**https://dev-watchtower.workshop.io**. No port is published on the host.
 
 ```sh
-docker compose up --build
+# Once: the gateway. It also creates the Docker network `workshop`.
+cd infra/gateway && scripts/new-certs.sh && docker compose up -d --build
+# Then the Watchtower.
+cd apps/watchtower && docker compose up -d --build --wait
 ```
 
-Or `pnpm docker:up` (build, start detached and wait until healthy), and
-`pnpm docker:down` to stop it. Open `http://localhost:4321/`.
+Or `pnpm docker:up` (build, start detached and wait until healthy), and `pnpm docker:down`
+to stop it. The browser needs two one-time steps by the User: the hosts line
+`127.0.0.1 dev-watchtower.workshop.io` and trust in the Workshop Local CA. Both are
+described in `infra/gateway/README.md`. To check it without them:
 
-Only one of the two can run at a time, because both use port 4321 on the host.
+```sh
+curl --resolve dev-watchtower.workshop.io:443:127.0.0.1 \
+     --cacert infra/gateway/certs/ca/workshop-ca.crt --ssl-no-revoke \
+     https://dev-watchtower.workshop.io/api/health
+```
+
+The host server (`pnpm start`, on `127.0.0.1:4321`) and the container no longer compete
+for a port, so both can run at once.
 
 How the container is set up (`Dockerfile`, `compose.yaml`):
 
-- The workstation (`../..`) is mounted read-only at `/workstation`, and polled every
-  2 s (`WATCHTOWER_POLL_MS`), because file events from a Windows host do not reach the
+- **Network.** The container joins the external network `workshop` as `watchtower`, the
+  DNS name the gateway proxies to (`http://watchtower:4321`). Start the gateway first,
+  because `docker compose up` here needs the `workshop` network to exist.
+- **Trust.** The server admits loopback peers (its own HEALTHCHECK) and exactly one remote
+  peer: the gateway's fixed address `172.30.50.2` (`WATCHTOWER_TRUSTED_CLIENTS`).
+  `WATCHTOWER_PUBLIC_ORIGIN=https://dev-watchtower.workshop.io` admits that Host and is
+  the origin for same-origin checks (see _Container mode and the gateway_ below).
+  Anything else gets 403.
+- **Workstation.** `../..` is mounted read-only at `/workstation` and polled every 2 s
+  (`WATCHTOWER_POLL_MS`), because file events from a Windows host do not reach the
   container through the bind mount.
-- Logs: `../../limforia/logs/watchtower` is bind-mounted read-write at `/var/log/app`
+- **Logs.** `../../limforia/logs/watchtower` is bind-mounted read-write at `/var/log/app`
   (`LOG_DIR`), so log files land in `limforia/logs/watchtower/bff/` and `client/` on the
   host. It is a separate mount, not nested under `/workstation`. Compose creates the
   host folder if it is missing. The same files are also visible read-only under
   `/workstation/limforia/logs/`, which the watcher always ignores.
-- The port is published on `127.0.0.1` only. The container runs as the `node` user,
-  with a read-only root filesystem (the log mount and a `tmpfs` at `/tmp` are the only
-  writable paths), all capabilities dropped and
-  `no-new-privileges`.
-- The server admits loopback peers and the one address in `WATCHTOWER_TRUSTED_CLIENTS`.
-  On Docker Desktop for Windows, traffic to the published port reaches the server from
-  the gateway of the compose network (`172.30.43.1`), not from `192.168.65.x`. This was
-  measured on Docker Desktop 4.95 by holding a connection open and reading the container's
-  socket table (`netstat -tn`). If you change the network's `subnet` or `gateway`, change
-  `WATCHTOWER_TRUSTED_CLIENTS` with it. Without it, every request from the host gets 403.
-- The image health check requests `/api/health` with Node's `fetch`.
+- **Hardening.** The container runs as the `node` user, with a read-only root filesystem
+  (the log mount and a `tmpfs` at `/tmp` are the only writable paths), all capabilities
+  dropped and `no-new-privileges`.
+- **Health.** The image health check requests `/api/health` on `127.0.0.1:4321` inside
+  the container, with Node's `fetch`.
 
 ## Architecture (ADR-004)
 
