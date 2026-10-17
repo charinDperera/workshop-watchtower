@@ -1,0 +1,35 @@
+---
+/**
+ * The top of every page: an eyebrow, the page's single h1, a lede and an illuminated rule.
+ * An optional `aside` slot sits to the right on wide screens (badges, actions).
+ */
+interface Props {
+  eyebrow?: string;
+  title: string;
+  lede?: string;
+}
+const { eyebrow, title, lede } = Astro.props;
+---
+
+<header class="mb-6 space-y-4">
+  <div class="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
+    <div class="min-w-0 space-y-2">
+      {eyebrow && <p class="eyebrow text-gold">{eyebrow}</p>}
+      <h1 class="text-2xl font-light text-ink sm:text-3xl lg:text-4xl">{title}</h1>
+      {lede && <p class="max-w-prose text-ink-muted">{lede}</p>}
+      <slot name="lede" />
+    </div>
+    {Astro.slots.has('aside') && (
+      <div class="shrink-0">
+        <slot name="aside" />
+      </div>
+    )}
+  </div>
+  <div class="flex items-center gap-3 text-gold" aria-hidden="true">
+    <span class="h-px flex-1 bg-linear-to-r from-gold/70 to-transparent"></span>
+    <svg class="size-3" viewBox="0 0 12 12">
+      <path d="M6 0 7.4 4.6 12 6 7.4 7.4 6 12 4.6 7.4 0 6 4.6 4.6Z" fill="currentColor"></path>
+    </svg>
+    <span class="h-px w-12 bg-gold/40"></span>
+  </div>
+</header>

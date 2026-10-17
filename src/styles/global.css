@@ -1,0 +1,686 @@
+/*
+ * The Watchtower design system. Owner: Luke.
+ *
+ * Identity: a night-sky observatory over a great archive. Calm, dense, restrained.
+ * Gold leaf is the single accent. Lato carries the whole interface; its weights set the
+ * hierarchy (300 page titles, 400 text, 700 headings and labels, 900 names in The Council).
+ * A mono carries the data (hashes, paths, tool names). Every colour pair used for text meets WCAG 2.2 AA (4.5:1) on every
+ * surface in both themes, and UI boundaries (borders, focus, meters) meet 3:1.
+ *
+ * Rules:
+ * - Define a value once here and use it through a utility or `var()`. No one-off values.
+ * - Tailwind's default palette, shadows and type scale are reset, so only these tokens exist.
+ * - Colours are `light-dark(day, night)`, so a theme is only a `color-scheme` switch.
+ *   Dark is the default. Light follows `prefers-color-scheme` until the user picks a theme,
+ *   which sets `data-theme` on <html> (see `src/components/HeadScript.astro`).
+ * - Never use colour alone to carry meaning: every status also has a word or a shape.
+ */
+/* Scan only src/ for class names: never caches, logs or the pnpm store. */
+@import 'tailwindcss' source('../');
+
+@theme static {
+  /* Colour: reset Tailwind's palette, then the semantic tokens (dark values). */
+  --color-*: initial;
+  --color-transparent: transparent;
+  --color-current: currentColor;
+
+  /* Each token is light-dark(day, night). `color-scheme` on <html> picks the side. */
+  --color-night: light-dark(#f5f1e6, #0a0f1d); /* page background */
+  --color-surface: light-dark(#fffcf5, #111a2e); /* panels */
+  --color-surface-2: light-dark(#ece5d3, #18233b); /* raised rows, chips */
+  --color-surface-sunken: light-dark(#ebe4d2, #080c18); /* wells, code */
+  --color-line: light-dark(#d5cbb2, #2a3754); /* hairlines, dividers (decorative) */
+  --color-line-strong: light-dark(#8e8468, #5b6b90); /* UI boundaries, 3:1 on every surface */
+
+  --color-ink: light-dark(#1a2033, #ece7da); /* primary text */
+  --color-ink-muted: light-dark(#454d63, #aab3c8); /* secondary text */
+  --color-ink-faint: light-dark(#5b6278, #8d97ae); /* meta text, still 4.5:1 everywhere */
+
+  --color-gold: light-dark(#7c5810, #d8b25c); /* gold leaf: links, focus, ornaments */
+  --color-gold-strong: light-dark(#5e420a, #ecca7a); /* hover */
+  --color-on-gold: light-dark(#fffcf5, #1c1407); /* text on a gold fill */
+
+  --color-active: light-dark(#17704f, #62d4a6); /* live, active, pass */
+  --color-warn: light-dark(#8f5300, #f0a660);
+  --color-fail: light-dark(#ad2533, #f38b8b);
+  --color-info: light-dark(#2b5aa6, #8fb4f0);
+  --color-retired: light-dark(#5e4a86, #b7a6d6); /* the departed: a quiet violet */
+
+  /* Night-sky ornaments (decorative only, never carry meaning). */
+  --color-star: light-dark(#b9ad90, #c9d3ec);
+
+  /* Tints for status surfaces. Text on them keeps its AA contrast (checked in both themes). */
+  --color-active-soft: color-mix(in oklab, var(--color-active) 12%, var(--color-surface));
+  --color-warn-soft: color-mix(in oklab, var(--color-warn) 12%, var(--color-surface));
+  --color-fail-soft: color-mix(in oklab, var(--color-fail) 12%, var(--color-surface));
+  --color-gold-soft: color-mix(in oklab, var(--color-gold) 10%, var(--color-surface));
+
+  /* Type */
+  --font-*: initial;
+  /* Lato (OFL, self-hosted via @fontsource/lato) for headings and text alike. `display` stays a
+     token of its own, so headings could take another face later without touching markup. */
+  --font-display:
+    'Lato', system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  --font-sans:
+    'Lato', system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  --font-mono:
+    'JetBrains Mono Variable', ui-monospace, 'Cascadia Code', 'SF Mono', Consolas, monospace;
+
+  /* Type scale: a minor third from a 16 px base. */
+  --text-*: initial;
+  --text-xs: 0.75rem;
+  --text-xs--line-height: 1rem;
+  --text-sm: 0.875rem;
+  --text-sm--line-height: 1.25rem;
+  --text-base: 1rem;
+  --text-base--line-height: 1.5rem;
+  --text-md: 1.125rem;
+  --text-md--line-height: 1.625rem;
+  --text-lg: 1.375rem;
+  --text-lg--line-height: 1.75rem;
+  --text-xl: 1.75rem;
+  --text-xl--line-height: 2.125rem;
+  --text-2xl: 2.25rem;
+  --text-2xl--line-height: 2.5rem;
+  --text-3xl: 3rem;
+  --text-3xl--line-height: 1.05;
+
+  /* Only the faces Shell.astro loads, so nothing is synthesised. Lato has no 500 or 600:
+     `medium` is the regular face and `semibold` the bold one. */
+  --font-weight-light: 300;
+  --font-weight-normal: 400;
+  --font-weight-medium: 400;
+  --font-weight-semibold: 700;
+  --font-weight-bold: 700;
+  --font-weight-black: 900;
+
+  --tracking-tight: -0.01em;
+  --tracking-normal: 0;
+  --tracking-wide: 0.04em;
+  --tracking-caps: 0.14em; /* small-caps eyebrows */
+  --tracking-epithet: 0.16em; /* the gold titles (epithets) of The Council */
+
+  /* Spacing: one 4 px step drives every gap, padding and size utility. */
+  --spacing: 0.25rem;
+
+  /* Layout */
+  --container-prose: 42rem;
+  --container-page: 90rem;
+  --breakpoint-xs: 30rem;
+
+  /* Radius */
+  --radius-*: initial;
+  --radius-sm: 0.25rem;
+  --radius-md: 0.5rem;
+  --radius-lg: 0.875rem;
+  --radius-full: 9999px;
+
+  /* Shadow and glow */
+  --shadow-*: initial;
+  --shadow-panel:
+    0 1px 0 0 light-dark(rgb(255 255 255 / 0.6), rgb(255 255 255 / 0.03)) inset,
+    0 12px 32px -18px light-dark(rgb(60 45 10 / 0.25), rgb(0 0 0 / 0.7));
+  --shadow-raised:
+    0 1px 0 0 light-dark(rgb(255 255 255 / 0.7), rgb(255 255 255 / 0.04)) inset,
+    0 18px 40px -20px light-dark(rgb(60 45 10 / 0.3), rgb(0 0 0 / 0.8));
+  --shadow-glow-gold: 0 0 0 1px var(--color-gold), 0 0 24px -6px var(--color-gold);
+  --shadow-glow-active: 0 0 0 1px var(--color-active), 0 0 22px -8px var(--color-active);
+  /* The live halo around a sigil, and the light behind the Overseer's. */
+  --shadow-halo-active:
+    0 0 0 2px var(--color-active),
+    0 0 20px 2px color-mix(in oklab, var(--color-active) 50%, transparent);
+  --shadow-halo-gold: 0 0 48px 6px color-mix(in oklab, var(--color-gold) 28%, transparent);
+
+  /* Motion. All of it stops under prefers-reduced-motion (see the end of this file). */
+  --ease-standard: cubic-bezier(0.2, 0, 0, 1);
+  --ease-out: cubic-bezier(0, 0, 0.2, 1);
+  --duration-fast: 120ms;
+  --duration-base: 200ms;
+  --duration-slow: 400ms;
+  --duration-pulse: 2400ms;
+  --duration-halo: 3200ms;
+  --duration-radiance: 240s;
+
+  /* Focus */
+  --focus-width: 2px;
+  --focus-offset: 2px;
+
+  --animate-pulse-ring: pulse-ring var(--duration-pulse) var(--ease-out) infinite;
+  --animate-shimmer: shimmer calc(var(--duration-pulse) * 0.75) linear infinite;
+  --animate-halo: halo var(--duration-halo) var(--ease-out) infinite;
+  --animate-radiance: radiance var(--duration-radiance) linear infinite;
+
+  /* The halo breathes outward and fades. Without motion it rests as a steady ring. */
+  @keyframes halo {
+    0% {
+      transform: scale(1);
+      opacity: 0.85;
+    }
+    75%,
+    100% {
+      transform: scale(1.22);
+      opacity: 0;
+    }
+  }
+  /* The Overseer's rays turn, very slowly. */
+  @keyframes radiance {
+    to {
+      transform: rotate(1turn);
+    }
+  }
+
+  @keyframes pulse-ring {
+    0% {
+      transform: scale(1);
+      opacity: 0.55;
+    }
+    70%,
+    100% {
+      transform: scale(2.6);
+      opacity: 0;
+    }
+  }
+  @keyframes shimmer {
+    0% {
+      background-position: -200% 0;
+    }
+    100% {
+      background-position: 200% 0;
+    }
+  }
+}
+
+/*
+ * Theme selection. Dark by default; light when the system prefers it and the user has not
+ * chosen; an explicit choice (data-theme) always wins.
+ */
+@layer theme {
+  :root,
+  [data-theme='dark'] {
+    color-scheme: dark;
+  }
+  @media (prefers-color-scheme: light) {
+    :root:not([data-theme]) {
+      color-scheme: light;
+    }
+  }
+  [data-theme='light'] {
+    color-scheme: light;
+  }
+}
+
+@layer base {
+  html {
+    background-color: var(--color-night);
+    color: var(--color-ink);
+    font-family: var(--font-sans);
+    font-size: 100%;
+    /* Lining figures everywhere, so counts and dates sit on the line. */
+    font-variant-numeric: lining-nums;
+    text-rendering: optimizeLegibility;
+    -webkit-font-smoothing: antialiased;
+    scroll-padding-top: calc(var(--spacing) * 24);
+  }
+
+  body {
+    min-height: 100dvh;
+    font-size: var(--text-base);
+    line-height: var(--text-base--line-height);
+  }
+
+  h1,
+  h2,
+  h3 {
+    font-family: var(--font-display);
+    font-weight: var(--font-weight-bold);
+    letter-spacing: var(--tracking-tight);
+    text-wrap: balance;
+  }
+
+  /*
+   * Links. Preflight sets `a { color: inherit; text-decoration: inherit }` in this same
+   * layer, so these must match its specificity (a plain `a`) and come after it to win.
+   * `:where(a)` would lose. Utility classes (utilities layer) still override them.
+   */
+  a {
+    color: var(--color-gold);
+    text-decoration-line: underline;
+    text-decoration-thickness: 1px;
+    text-underline-offset: 0.2em;
+    transition: color var(--duration-fast) var(--ease-standard);
+  }
+  a:hover {
+    color: var(--color-gold-strong);
+    text-decoration-thickness: 2px;
+  }
+
+  :focus-visible {
+    outline: var(--focus-width) solid var(--color-gold);
+    outline-offset: var(--focus-offset);
+    border-radius: var(--radius-sm);
+  }
+
+  code,
+  kbd,
+  samp,
+  pre {
+    font-family: var(--font-mono);
+    font-size: 0.92em;
+  }
+
+  ::selection {
+    background-color: var(--color-gold);
+    color: var(--color-on-gold);
+  }
+
+  /* Items marked js-only are hidden until the head script proves JavaScript runs. */
+  .no-js .js-only {
+    display: none !important;
+  }
+}
+
+@layer components {
+  /* A panel: the basic container of the dashboard. */
+  .panel {
+    background-color: var(--color-surface);
+    border: 1px solid var(--color-line);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-panel);
+  }
+
+  /* Small-caps label above a heading or value. */
+  .eyebrow {
+    font-family: var(--font-sans);
+    font-size: var(--text-xs);
+    line-height: var(--text-xs--line-height);
+    font-weight: var(--font-weight-semibold);
+    letter-spacing: var(--tracking-caps);
+    text-transform: uppercase;
+    color: var(--color-ink-faint);
+  }
+
+  /* An agent's title in The Council ("Prince of the Host"): gold small capitals. */
+  .epithet {
+    font-family: var(--font-sans);
+    font-size: var(--text-xs);
+    line-height: var(--text-xs--line-height);
+    font-weight: var(--font-weight-bold);
+    letter-spacing: var(--tracking-epithet);
+    text-transform: uppercase;
+    color: var(--color-gold);
+  }
+
+  /*
+   * An illuminated panel: the frame of The Council. A gilded double rule and a faint light
+   * falling from the top centre, over the plain panel surface.
+   */
+  .panel-illuminated {
+    position: relative;
+    isolation: isolate;
+    background-color: var(--color-surface);
+    background-image: radial-gradient(
+      ellipse 60% 45% at 50% 0%,
+      var(--color-gold-soft),
+      transparent 70%
+    );
+    border: 1px solid color-mix(in oklab, var(--color-gold) 45%, var(--color-line));
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-panel);
+  }
+  .panel-illuminated::before {
+    content: '';
+    position: absolute;
+    inset: calc(var(--spacing) * 1.5);
+    z-index: -1;
+    border: 1px solid color-mix(in oklab, var(--color-gold) 22%, transparent);
+    border-radius: calc(var(--radius-lg) - var(--spacing) * 1.5);
+    pointer-events: none;
+  }
+
+  /* Data figures line up in columns. */
+  .figure {
+    font-variant-numeric: tabular-nums lining-nums;
+  }
+
+  /* A chip: tool names, tags, skills. */
+  .chip {
+    display: inline-flex;
+    align-items: center;
+    gap: calc(var(--spacing) * 1);
+    padding: calc(var(--spacing) * 0.5) calc(var(--spacing) * 2);
+    border: 1px solid var(--color-line);
+    border-radius: var(--radius-full);
+    background-color: var(--color-surface-2);
+    color: var(--color-ink-muted);
+    font-size: var(--text-xs);
+    line-height: var(--text-xs--line-height);
+    white-space: nowrap;
+  }
+
+  /*
+   * Form controls. `.btn` plus `.btn-primary` (gold fill, one per form) or `.btn-quiet`
+   * (outline). `.field` wraps a `.field-label` and a `.select`. Targets are at least 36 px.
+   */
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: calc(var(--spacing) * 2);
+    min-height: calc(var(--spacing) * 9);
+    padding: calc(var(--spacing) * 2) calc(var(--spacing) * 4);
+    border: 1px solid transparent;
+    border-radius: var(--radius-md);
+    font-size: var(--text-sm);
+    line-height: var(--text-sm--line-height);
+    font-weight: var(--font-weight-semibold);
+    text-decoration: none;
+    white-space: nowrap;
+    cursor: pointer;
+    transition:
+      color var(--duration-fast) var(--ease-standard),
+      background-color var(--duration-fast) var(--ease-standard),
+      border-color var(--duration-fast) var(--ease-standard);
+  }
+  .btn-primary {
+    background-color: var(--color-gold);
+    color: var(--color-on-gold);
+  }
+  .btn-primary:hover {
+    background-color: var(--color-gold-strong);
+    color: var(--color-on-gold);
+  }
+  .btn-quiet {
+    border-color: var(--color-line-strong);
+    background-color: transparent;
+    color: var(--color-ink);
+  }
+  .btn-quiet:hover {
+    border-color: var(--color-gold);
+    color: var(--color-gold);
+  }
+  .btn:disabled,
+  .btn[aria-disabled='true'] {
+    cursor: not-allowed;
+    opacity: 0.55;
+  }
+
+  .field {
+    display: flex;
+    min-width: 0;
+    flex-direction: column;
+    gap: calc(var(--spacing) * 1);
+  }
+  .field-label {
+    font-size: var(--text-xs);
+    line-height: var(--text-xs--line-height);
+    font-weight: var(--font-weight-semibold);
+    color: var(--color-ink-muted);
+  }
+  .select {
+    width: 100%;
+    min-height: calc(var(--spacing) * 9);
+    padding: calc(var(--spacing) * 2) calc(var(--spacing) * 3);
+    border: 1px solid var(--color-line-strong);
+    border-radius: var(--radius-md);
+    background-color: var(--color-surface-2);
+    color: var(--color-ink);
+    font-size: var(--text-sm);
+    line-height: var(--text-sm--line-height);
+    transition: border-color var(--duration-fast) var(--ease-standard);
+  }
+  .select:hover {
+    border-color: var(--color-gold);
+  }
+  .select:disabled {
+    cursor: not-allowed;
+    opacity: 0.55;
+  }
+
+  /* Loading placeholder. The shimmer stops under reduced motion. */
+  .skeleton {
+    border-radius: var(--radius-sm);
+    background: linear-gradient(
+      90deg,
+      var(--color-surface-2) 25%,
+      var(--color-line) 50%,
+      var(--color-surface-2) 75%
+    );
+    background-size: 200% 100%;
+    animation: var(--animate-shimmer);
+  }
+
+  /*
+   * A standalone link whose role is clear from layout (card and list titles, agent names in
+   * the pipeline or a feed). It drops the resting underline but shows one on hover and on
+   * focus-visible, alongside the focus ring. Links in running text, prose and empty or error
+   * states keep the base underline (WCAG 1.4.1): never use this class there.
+   */
+  .link-standalone {
+    text-decoration-line: none;
+  }
+  .link-standalone:hover,
+  .link-standalone:focus-visible {
+    text-decoration-line: underline;
+    text-decoration-thickness: 1px;
+  }
+
+  /* A link that makes its whole positioned parent clickable; the focus ring wraps the parent. */
+  .stretched-link::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: var(--radius-lg);
+  }
+  .stretched-link:focus-visible {
+    outline: none;
+  }
+  .stretched-link:focus-visible::after {
+    outline: var(--focus-width) solid var(--color-gold);
+    outline-offset: var(--focus-offset);
+  }
+
+  /*
+   * Archive prose: rendered Markdown from /api/record (records, the Constitution).
+   * Tokens only. Text keeps a reading measure; tables and code may use the full width.
+   */
+  .prose {
+    color: var(--color-ink);
+    font-size: var(--text-base);
+    line-height: 1.7;
+    overflow-wrap: break-word;
+  }
+  .prose > * + * {
+    margin-top: calc(var(--spacing) * 4);
+  }
+  /* Text keeps a reading measure; tables and code may use the panel's width. */
+  .prose > :is(p, ul, ol, blockquote, h2, h3, h4, h5, h6, hr) {
+    max-width: var(--container-prose);
+  }
+  .prose :is(h2, h3, h4, h5, h6) {
+    color: var(--color-ink);
+    font-weight: var(--font-weight-semibold);
+    letter-spacing: var(--tracking-tight);
+    text-wrap: balance;
+  }
+  .prose > :is(h2, h3, h4, h5, h6) {
+    margin-top: calc(var(--spacing) * 8);
+  }
+  .prose > :is(h2, h3, h4, h5, h6):first-child {
+    margin-top: 0;
+  }
+  .prose h2 {
+    font-family: var(--font-display);
+    font-size: var(--text-xl);
+    line-height: var(--text-xl--line-height);
+  }
+  .prose h3 {
+    font-family: var(--font-display);
+    font-size: var(--text-lg);
+    line-height: var(--text-lg--line-height);
+    padding-bottom: calc(var(--spacing) * 1.5);
+    border-bottom: 1px solid var(--color-line);
+  }
+  .prose h4 {
+    font-family: var(--font-display);
+    font-size: var(--text-md);
+    line-height: var(--text-md--line-height);
+  }
+  .prose :is(h5, h6) {
+    font-family: var(--font-sans);
+    font-size: var(--text-xs);
+    line-height: var(--text-xs--line-height);
+    letter-spacing: var(--tracking-caps);
+    text-transform: uppercase;
+    color: var(--color-ink-muted);
+  }
+  .prose > :is(h2, h3, h4, h5, h6) + * {
+    margin-top: calc(var(--spacing) * 2);
+  }
+
+  .prose strong {
+    font-weight: var(--font-weight-semibold);
+    color: var(--color-ink);
+  }
+  .prose em {
+    font-style: italic;
+  }
+  .prose del {
+    color: var(--color-ink-faint);
+  }
+
+  .prose :is(ul, ol) {
+    padding-left: calc(var(--spacing) * 6);
+  }
+  .prose ul {
+    list-style-type: disc;
+  }
+  .prose ol {
+    list-style-type: decimal;
+  }
+  .prose li + li,
+  .prose li > :is(ul, ol) {
+    margin-top: calc(var(--spacing) * 1);
+  }
+  .prose li::marker {
+    color: var(--color-gold);
+  }
+  .prose ol > li::marker {
+    font-variant-numeric: tabular-nums;
+  }
+  .prose input[type='checkbox'] {
+    margin-right: calc(var(--spacing) * 1.5);
+    accent-color: var(--color-gold);
+  }
+
+  .prose a {
+    color: var(--color-gold);
+  }
+
+  .prose blockquote {
+    border-left: 2px solid var(--color-gold);
+    background-color: var(--color-gold-soft);
+    border-radius: 0 var(--radius-md) var(--radius-md) 0;
+    padding: calc(var(--spacing) * 3) calc(var(--spacing) * 4);
+    color: var(--color-ink-muted);
+    font-family: var(--font-display);
+    font-size: var(--text-md);
+    line-height: var(--text-md--line-height);
+  }
+  .prose blockquote > * + * {
+    margin-top: calc(var(--spacing) * 2);
+  }
+
+  .prose hr {
+    border: 0;
+    height: 1px;
+    margin-block: calc(var(--spacing) * 8);
+    background: linear-gradient(90deg, transparent, var(--color-line-strong), transparent);
+  }
+
+  .prose code {
+    font-family: var(--font-mono);
+    font-size: 0.88em;
+    padding: 0.1em 0.35em;
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--color-line);
+    background-color: var(--color-surface-sunken);
+    color: var(--color-ink);
+    overflow-wrap: anywhere;
+  }
+  .prose pre {
+    overflow-x: auto;
+    padding: calc(var(--spacing) * 3) calc(var(--spacing) * 4);
+    border: 1px solid var(--color-line);
+    border-radius: var(--radius-md);
+    background-color: var(--color-surface-sunken);
+    font-size: var(--text-sm);
+    line-height: var(--text-sm--line-height);
+  }
+  .prose pre code {
+    padding: 0;
+    border: 0;
+    background: none;
+    font-size: inherit;
+    overflow-wrap: normal;
+  }
+
+  .prose .prose-scroll {
+    overflow-x: auto;
+    border: 1px solid var(--color-line);
+    border-radius: var(--radius-md);
+  }
+  .prose table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: var(--text-sm);
+    line-height: var(--text-sm--line-height);
+  }
+  .prose th {
+    text-align: left;
+    font-weight: var(--font-weight-semibold);
+    color: var(--color-ink);
+    background-color: var(--color-surface-2);
+    border-bottom: 1px solid var(--color-line-strong);
+  }
+  .prose :is(th, td) {
+    padding: calc(var(--spacing) * 2) calc(var(--spacing) * 3);
+    vertical-align: top;
+  }
+  .prose td {
+    color: var(--color-ink-muted);
+    border-top: 1px solid var(--color-line);
+  }
+  /* The first column is usually a date or a name: keep it on one line. */
+  .prose td:first-child {
+    white-space: nowrap;
+  }
+  .prose :is(th, td)[align='center'] {
+    text-align: center;
+  }
+  .prose :is(th, td)[align='right'] {
+    text-align: right;
+  }
+
+  .sr-only-focusable:not(:focus, :focus-within) {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+    border-width: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

@@ -1,0 +1,258 @@
+---
+/**
+ * The Great Archive: the record viewer (`?record=<path>`), the records filtered by wing,
+ * type, status, tag and agent (a GET form, so it works without JavaScript), and the wings
+ * with their counts. Server-rendered; islands keep the list, the wings and the open
+ * record live. Owner: Luka.
+ */
+import ErrorState from '../components/ErrorState.svelte';
+import PageHeader from '../components/PageHeader.astro';
+import Panel from '../components/Panel.astro';
+import LiveRecordViewer from '../components/live/LiveRecordViewer.svelte';
+import LiveRecords from '../components/live/LiveRecords.svelte';
+import LiveWings from '../components/live/LiveWings.svelte';
+import Shell from '../layouts/Shell.astro';
+import { getRuntime } from '../server/live/runtime';
+import { loadRenderedRecord } from '../server/render/record-service';
+import type { RenderedRecord } from '../shared/types';
+import { knownAgents } from '../ui/agent-title';
+import {
+  archiveQuery,
+  filterOptions,
+  filterRecords,
+  hasFilter,
+  parseArchiveFilter,
+  scopeCount,
+  withSelected,
+  type FilterOption,
+} from '../ui/archive-filter';
+import { capitalise } from '../ui/format';
+import { WING_LABELS } from '../ui/labels';
+import { loadSnapshot } from '../server/handlers/page-snapshot';
+
+const { snapshot, error } = await loadSnapshot();
+const now = Date.now();
+const retryHref = Astro.url.pathname;
+
+const params = Astro.url.searchParams;
+const { filter, ignored } = parseArchiveFilter(params);
+const filtered = hasFilter(filter);
+
+// The record viewer: the same guarded logic as GET /api/record.
+const asked = params.getAll('record').map((p) => p.trim());
+const requested = asked.find((p) => p !== '') ?? null;
+let record: RenderedRecord | null = null;
+let recordError: string | null = null;
+let recordStatus: number | null = null;
+if (asked.length > 1) {
+  recordError = 'Give exactly one record';
+  recordStatus = 400;
+} else if (requested !== null) {
+  try {
+    const result = await loadRenderedRecord(getRuntime().root, requested);
+    if (result.ok) record = result.record;
+    else {
+      recordError = result.error;
+      recordStatus = result.status;
+    }
+  } catch (err) {
+    console.error(`[watchtower] /limforia record failed: ${(err as Error).message}`);
+    recordError = 'The record could not be read';
+    recordStatus = 500;
+  }
+}
+const viewing = requested !== null || recordError !== null;
+if (recordStatus) Astro.response.status = recordStatus;
+else if (!snapshot) Astro.response.status = 503;
+
+const records = snapshot ? filterRecords(snapshot.records, filter) : null;
+const scope = snapshot ? scopeCount(snapshot.records, filter) : 0;
+const options = snapshot ? filterOptions(snapshot.records) : null;
+const meta =
+  record && snapshot ? (snapshot.records.find((r) => r.path === record.path) ?? null) : null;
+const closeHref = `/limforia${archiveQuery(filter)}`;
+
+const wingOptions = snapshot
+  ? snapshot.wings.map((w) => ({ value: w.id, label: WING_LABELS[w.id].title, count: w.count }))
+  : [];
+
+interface Field {
+  name: 'type' | 'status' | 'tag' | 'agent';
+  label: string;
+  any: string;
+  options: FilterOption[];
+  show: (value: string) => string;
+}
+const same = (v: string) => v;
+const field = (
+  name: Field['name'],
+  label: string,
+  any: string,
+  show: Field['show'] = same,
+): Field => ({
+  name,
+  label,
+  any,
+  show,
+  options: withSelected(options?.[name] ?? [], filter[name]),
+});
+const fields: Field[] = options
+  ? [
+      field('type', 'Type', 'Any type'),
+      field('status', 'Status', 'Any status'),
+      field('tag', 'Tag', 'Any tag', (v) => `#${v}`),
+      field('agent', 'Agent', 'Any agent', capitalise),
+    ]
+  : [];
+
+const recordsEyebrow = filter.wing ? `In ${WING_LABELS[filter.wing].title}` : 'Every wing';
+---
+
+<Shell
+  title={record ? `${record.title} · Limforia` : 'Limforia'}
+  generatedAt={snapshot?.generatedAt ?? null}
+  now={now}
+  rootName={snapshot?.rootName ?? null}
+>
+  <PageHeader
+    eyebrow="The Great Archive"
+    title="Limforia"
+    lede="The permanent history of the workstation. Nothing placed here is deleted without the User's permission."
+  />
+
+  {error && (
+    <div class="mb-6">
+      <ErrorState
+        title="The archive could not be read"
+        message={`${error} The page will fill in by itself if live updates recover.`}
+        retryHref={retryHref}
+      />
+    </div>
+  )}
+
+  <div class="grid grid-cols-1 gap-6 lg:grid-cols-12">
+    <div class="flex min-w-0 flex-col gap-6 lg:col-span-8">
+      {viewing && (
+        <section aria-label="Record viewer">
+          <LiveRecordViewer
+            client:load
+            initial={record}
+            generatedAt={snapshot?.generatedAt ?? null}
+            error={recordError}
+            errorStatus={recordStatus}
+            requested={requested}
+            meta={meta}
+            knownAgents={snapshot ? knownAgents(snapshot.agents) : []}
+            level={2}
+            closeHref={closeHref}
+          />
+        </section>
+      )}
+
+      <Panel id="records-heading" title="Records" eyebrow={recordsEyebrow}>
+        <div class="flex flex-col gap-4">
+          {options && (
+            <form
+              method="get"
+              action="/limforia"
+              class="grid grid-cols-2 items-end gap-3 rounded-md border border-line bg-surface-sunken p-3 xl:grid-cols-3"
+              aria-label="Filter the records"
+            >
+              {record && <input type="hidden" name="record" value={record.path} />}
+              <div class="field">
+                <label for="filter-wing" class="field-label">
+                  Wing
+                </label>
+                <select id="filter-wing" name="wing" class="select">
+                  <option value="" selected={!filter.wing}>
+                    All wings
+                  </option>
+                  {wingOptions.map((w) => (
+                    <option value={w.value} selected={filter.wing === w.value}>
+                      {w.label} ({w.count})
+                    </option>
+                  ))}
+                </select>
+              </div>
+              {fields.map((f) => (
+                <div class="field">
+                  <label for={`filter-${f.name}`} class="field-label">
+                    {f.label}
+                  </label>
+                  <select id={`filter-${f.name}`} name={f.name} class="select">
+                    <option value="" selected={!filter[f.name]}>
+                      {f.any}
+                    </option>
+                    {f.options.map((o) => (
+                      <option
+                        value={o.value}
+                        selected={filter[f.name]?.toLowerCase() === o.value.toLowerCase()}
+                      >
+                        {f.show(o.value)} ({o.count})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              ))}
+              <div class="col-span-2 flex flex-wrap items-center gap-3 xl:col-span-1">
+                <button type="submit" class="btn btn-primary">
+                  Apply filters
+                </button>
+                {filtered && (
+                  <a
+                    href={
+                      record ? `/limforia?record=${encodeURIComponent(record.path)}` : '/limforia'
+                    }
+                    class="btn btn-quiet"
+                  >
+                    Clear filters
+                  </a>
+                )}
+              </div>
+            </form>
+          )}
+
+          {ignored.length > 0 && (
+            <p
+              class="rounded-md border border-warn/60 bg-warn-soft p-3 text-sm text-ink"
+              role="status"
+            >
+              Ignored an unknown filter: {ignored.join(', ')}.
+            </p>
+          )}
+          {filter.wing === 'templates' && (
+            <p class="text-sm text-ink-muted">
+              Templates are the forms new records are written from. They are not records, so the
+              compliance checks pass them by.
+            </p>
+          )}
+
+          <LiveRecords
+            client:load
+            initial={records}
+            initialScope={scope}
+            filter={filter}
+            current={record?.path ?? null}
+            error={error}
+            retryHref={retryHref}
+          />
+        </div>
+      </Panel>
+    </div>
+
+    <div class="flex min-w-0 flex-col gap-6 lg:col-span-4">
+      <Panel id="wings-heading" title="Wings" eyebrow="Limforia and intel">
+        <LiveWings
+          client:load
+          initial={snapshot?.wings ?? null}
+          error={error}
+          retryHref={retryHref}
+          current={filter.wing ?? null}
+        />
+        <p class="mt-3 text-xs text-ink-faint">
+          Choose a wing to see only its records. Intel holds Uriel's research, outside Limforia.
+        </p>
+      </Panel>
+    </div>
+  </div>
+</Shell>

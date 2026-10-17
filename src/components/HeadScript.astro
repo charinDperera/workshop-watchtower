@@ -1,0 +1,21 @@
+---
+/**
+ * Runs before first paint: marks that JavaScript is available (so `js-only` controls show)
+ * and applies a stored theme choice, so there is no flash of the wrong theme.
+ * Storage can be blocked; every access is wrapped in try/catch.
+ */
+---
+
+<script is:inline>
+  (function () {
+    const root = document.documentElement;
+    root.classList.remove('no-js');
+    root.classList.add('js');
+    try {
+      const theme = window.localStorage.getItem('watchtower-theme');
+      if (theme === 'light' || theme === 'dark') root.setAttribute('data-theme', theme);
+    } catch {
+      /* Storage unavailable: follow the system preference. */
+    }
+  })();
+</script>

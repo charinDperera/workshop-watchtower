@@ -1,0 +1,82 @@
+---
+/**
+ * Git: the workstation repository (branch, upstream, ahead, working tree), its last 50
+ * commits, and the repository of every app under apps/. All live. Owner: Luka.
+ */
+import ErrorState from '../components/ErrorState.svelte';
+import PageHeader from '../components/PageHeader.astro';
+import Panel from '../components/Panel.astro';
+import LiveApps from '../components/live/LiveApps.svelte';
+import LiveCommits from '../components/live/LiveCommits.svelte';
+import LiveRepo from '../components/live/LiveRepo.svelte';
+import Shell from '../layouts/Shell.astro';
+import { COMMIT_LIMIT } from '../server/constants';
+import { loadSnapshot } from '../server/handlers/page-snapshot';
+
+const { snapshot, error } = await loadSnapshot();
+const now = Date.now();
+const retryHref = Astro.url.pathname;
+if (!snapshot) Astro.response.status = 503;
+
+const repo = snapshot?.git.workstation ?? null;
+const repoError = repo
+  ? (repo.error ?? (repo.isRepo ? null : 'The workstation is not a git repository.'))
+  : error;
+---
+
+<Shell
+  title="Git"
+  generatedAt={snapshot?.generatedAt ?? null}
+  now={now}
+  rootName={snapshot?.rootName ?? null}
+>
+  <PageHeader
+    eyebrow="History"
+    title="Git"
+    lede="The workstation is a local repository: every change to the laws, The Council and the archive is committed. It is never pushed without the User's permission. Each app keeps its own repository."
+  />
+
+  {error && (
+    <div class="mb-6">
+      <ErrorState
+        title="The workstation could not be read"
+        message={`${error} The page will fill in by itself if live updates recover.`}
+        retryHref={retryHref}
+      />
+    </div>
+  )}
+
+  <div class="flex flex-col gap-6">
+    <section aria-labelledby="repo-heading" class="flex flex-col gap-3">
+      <h2 id="repo-heading" class="text-xl text-ink">
+        The workstation repository
+      </h2>
+      <LiveRepo client:load initial={repo} error={repoError} retryHref={retryHref} />
+    </section>
+
+    <Panel id="apps-heading" title="Apps" eyebrow="Every folder in apps/">
+      <LiveApps
+        client:load
+        initial={snapshot?.apps ?? null}
+        now={now}
+        error={error}
+        retryHref={retryHref}
+      />
+    </Panel>
+
+    <Panel
+      id="commits-heading"
+      title="Commits"
+      eyebrow={`The latest ${COMMIT_LIMIT}, newest first`}
+    >
+      <LiveCommits
+        client:load
+        initial={repo?.isRepo ? repo.commits : null}
+        now={now}
+        limit={COMMIT_LIMIT}
+        error={repoError}
+        retryHref={retryHref}
+      />
+    </Panel>
+  </div>
+</Shell>

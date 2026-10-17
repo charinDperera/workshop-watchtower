@@ -1,0 +1,102 @@
+---
+/**
+ * The Laws: the Constitution (CLAUDE.md, through the record renderer) next to every
+ * compliance check with the law it serves and its findings. They stack on narrow
+ * screens. Both are live. Owner: Luka.
+ */
+import ErrorState from '../components/ErrorState.svelte';
+import PageHeader from '../components/PageHeader.astro';
+import Panel from '../components/Panel.astro';
+import LiveCompliance from '../components/live/LiveCompliance.svelte';
+import LiveRecordViewer from '../components/live/LiveRecordViewer.svelte';
+import Shell from '../layouts/Shell.astro';
+import { PATHS } from '../server/constants';
+import { getRuntime } from '../server/live/runtime';
+import { loadRenderedRecord } from '../server/render/record-service';
+import type { RenderedRecord } from '../shared/types';
+import { loadSnapshot } from '../server/handlers/page-snapshot';
+
+const { snapshot, error } = await loadSnapshot();
+const now = Date.now();
+const retryHref = Astro.url.pathname;
+
+let constitution: RenderedRecord | null = null;
+let lawError: string | null = null;
+let lawStatus: number | null = null;
+try {
+  const result = await loadRenderedRecord(getRuntime().root, PATHS.constitution);
+  if (result.ok) constitution = result.record;
+  else {
+    lawError = result.error;
+    lawStatus = result.status;
+  }
+} catch (err) {
+  console.error(`[watchtower] /laws constitution failed: ${(err as Error).message}`);
+  lawError = 'The Constitution could not be read';
+  lawStatus = 500;
+}
+if (!snapshot && !constitution) Astro.response.status = 503;
+---
+
+<Shell
+  title="The Laws"
+  generatedAt={snapshot?.generatedAt ?? null}
+  now={now}
+  rootName={snapshot?.rootName ?? null}
+>
+  <PageHeader
+    eyebrow="The Constitution"
+    title="The Laws"
+    lede="The First Law and the Five Commandments bind every agent. Beside them, the checks that show whether they are kept, right now."
+  >
+    <p slot="lede" class="text-sm">
+      <a href="#checks-heading">Jump to the compliance checks</a>
+    </p>
+  </PageHeader>
+
+  {error && (
+    <div class="mb-6">
+      <ErrorState
+        title="The compliance checks could not be run"
+        message={`${error} The page will fill in by itself if live updates recover.`}
+        retryHref={retryHref}
+      />
+    </div>
+  )}
+
+  <div class="grid grid-cols-1 items-start gap-6 lg:grid-cols-12">
+    <section aria-label="The Constitution" class="min-w-0 lg:col-span-7">
+      <LiveRecordViewer
+        client:load
+        initial={constitution}
+        generatedAt={snapshot?.generatedAt ?? null}
+        error={lawError}
+        errorStatus={lawStatus}
+        requested={constitution ? null : PATHS.constitution}
+        level={2}
+        eyebrow="CLAUDE.md · read-only"
+        headingId="constitution-heading"
+      />
+    </section>
+
+    <Panel
+      id="checks-heading"
+      title="Compliance checks"
+      eyebrow="Is the law kept?"
+      class="min-w-0 lg:col-span-5"
+    >
+      <LiveCompliance
+        client:load
+        initial={snapshot?.compliance ?? null}
+        variant="full"
+        level={3}
+        showServes
+        error={error}
+        retryHref={retryHref}
+      />
+      <p class="mt-4 text-xs text-ink-faint">
+        Each check names the law it serves. Checks run again whenever the workstation changes.
+      </p>
+    </Panel>
+  </div>
+</Shell>

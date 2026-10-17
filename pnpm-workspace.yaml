@@ -1,0 +1,5 @@
+# Keep pnpm's package store and metadata cache inside the workstation
+# (Commandment 1: no writes outside F:\Projects). pnpm's default build-script
+# blocking and 1-day release cooldown are left on.
+storeDir: .pnpm-store
+cacheDir: .local/pnpm-cache

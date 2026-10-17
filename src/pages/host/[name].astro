@@ -1,0 +1,249 @@
+---
+/**
+ * One agent of The Council: a sigil hero with the title (epithet), role and place in the
+ * hierarchy; live status and how the last session ended; the charge from the definition,
+ * tools, skills, service record, recent activity and the record of strikes.
+ * Unknown names render the 404 page. Retired names show their Soul Binder entry.
+ */
+import EmptyState from '../../components/EmptyState.svelte';
+import ErrorState from '../../components/ErrorState.svelte';
+import PageHeader from '../../components/PageHeader.astro';
+import Panel from '../../components/Panel.astro';
+import RecordList from '../../components/RecordList.svelte';
+import Sigil from '../../components/Sigil.svelte';
+import LiveActivity from '../../components/live/LiveActivity.svelte';
+import LiveAgentSigil from '../../components/live/LiveAgentSigil.svelte';
+import LiveAgentStatus from '../../components/live/LiveAgentStatus.svelte';
+import Shell from '../../layouts/Shell.astro';
+import { rankLabel } from '../../ui/council';
+import { agentRefs, formatDate } from '../../ui/format';
+import { recordHref } from '../../ui/labels';
+import { loadSnapshot } from '../../server/handlers/page-snapshot';
+
+const slug = (Astro.params.name ?? '').toLowerCase();
+const { snapshot, error } = await loadSnapshot();
+const now = Date.now();
+const retryHref = Astro.url.pathname;
+
+const agent = snapshot?.agents.find((a) => a.slug === slug) ?? null;
+const departed = snapshot?.retired.find((r) => r.name.toLowerCase() === slug) ?? null;
+if (snapshot && !agent && !departed) return Astro.rewrite('/404');
+if (!snapshot) Astro.response.status = 503;
+
+/** Matches the server's per-agent history (`Agent.recentEvents`). */
+const ACTIVITY_LIMIT = 25;
+const auditRecords =
+  agent && snapshot ? snapshot.records.filter((r) => agent.auditLogs.includes(r.path)) : [];
+const events = agent ? agent.recentEvents.slice(0, ACTIVITY_LIMIT) : [];
+const def = agent?.definition ?? null;
+const place = agent ? rankLabel(agent) : null;
+const epithet = agent?.title?.trim() || null;
+const name = agent?.name ?? departed?.name ?? slug;
+---
+
+<Shell
+  title={snapshot ? name : 'Agent unavailable'}
+  generatedAt={snapshot?.generatedAt ?? null}
+  now={now}
+  rootName={snapshot?.rootName ?? null}
+>
+  <nav aria-label="Breadcrumb" class="mb-4 text-sm">
+    <ol class="flex items-center gap-2 text-ink-faint">
+      <li>
+        <a href="/host">The Council</a>
+      </li>
+      <li aria-hidden="true">/</li>
+      <li>
+        <span aria-current="page" class="text-ink-muted">
+          {name}
+        </span>
+      </li>
+    </ol>
+  </nav>
+
+  {!snapshot && (
+    <>
+      <PageHeader eyebrow="The Council" title="This agent could not be read" />
+      <ErrorState title="The workstation could not be read" message={error} retryHref={retryHref} />
+    </>
+  )}
+
+  {departed && !agent && (
+    <>
+      <PageHeader eyebrow="The departed" title={departed.name} lede={departed.role}>
+        <div slot="aside">
+          <Sigil name={departed.name} status="retired" class="size-20" />
+        </div>
+      </PageHeader>
+      <Panel id="departed-heading" title="Bound into the Soul Binder">
+        <dl class="grid grid-cols-1 gap-x-6 gap-y-3 text-sm sm:grid-cols-[auto_1fr]">
+          <dt class="text-ink-faint">Served</dt>
+          <dd>{departed.served}</dd>
+          <dt class="text-ink-faint">Cause</dt>
+          <dd>{departed.cause}</dd>
+          <dt class="text-ink-faint">Audit log</dt>
+          <dd>
+            {departed.auditLogPath ? (
+              <a href={recordHref(departed.auditLogPath)}>{departed.auditLog}</a>
+            ) : (
+              departed.auditLog
+            )}
+          </dd>
+        </dl>
+        <p class="mt-4 text-sm text-ink-muted">
+          The name is never used again. <a href="/soul-binder">Visit the Soul Binder</a>
+        </p>
+      </Panel>
+    </>
+  )}
+
+  {agent && snapshot && (
+    <>
+      <header class="panel-illuminated mb-6 flex flex-col items-center gap-4 p-6 text-center sm:p-8 md:flex-row md:gap-10 md:text-left">
+        <LiveAgentSigil
+          client:load
+          initial={{ slug: agent.slug, name: agent.name, status: agent.status, rank: agent.rank }}
+        />
+        <div class="min-w-0 space-y-2">
+          <p class="eyebrow text-gold">{place}</p>
+          <h1 class="text-3xl font-black tracking-tight text-ink sm:text-4xl">{agent.name}</h1>
+          {epithet && <p class="epithet text-sm">{epithet}</p>}
+          <p class="max-w-prose text-ink-muted">{agent.role ?? 'No role in the roster.'}</p>
+        </div>
+      </header>
+
+      <div class="flex flex-col gap-6">
+        <LiveAgentStatus client:load initial={agent} now={now} />
+
+        <div class="grid grid-cols-1 gap-6 lg:grid-cols-12">
+          <div class="flex flex-col gap-6 lg:col-span-7 xl:col-span-8">
+            <Panel
+              id="about-heading"
+              title="Charge"
+              eyebrow={def ? 'From the definition' : undefined}
+            >
+              {def?.description ? (
+                <p class="max-w-prose text-ink">{def.description}</p>
+              ) : agent.isMain ? (
+                <p class="max-w-prose text-ink-muted">
+                  {agent.name} oversees The Council as the main agent, and has no definition file by
+                  design.
+                </p>
+              ) : (
+                <EmptyState
+                  title="No description"
+                  message="The definition has no description, or there is no definition file."
+                  compact
+                />
+              )}
+              {def && def.problems.length > 0 && (
+                <ul class="mt-4 space-y-1 rounded-md border border-warn/60 bg-warn-soft p-3 text-sm text-ink">
+                  {def.problems.map((p) => (
+                    <li>{p}</li>
+                  ))}
+                </ul>
+              )}
+            </Panel>
+
+            <Panel
+              id="activity-heading"
+              title="Recent activity"
+              eyebrow="Live"
+              moreHref={`/activity?agent=${encodeURIComponent(agent.slug)}`}
+              moreLabel="Full timeline"
+            >
+              <LiveActivity
+                client:load
+                initial={{ events, agents: agentRefs(snapshot.agents) }}
+                now={now}
+                agent={agent.slug}
+                limit={ACTIVITY_LIMIT}
+                label={`Recent activity of ${agent.name}`}
+                emptyTitle="Not seen yet"
+                emptyMessage={`No hook events from ${agent.name} are in the log yet.`}
+              />
+            </Panel>
+          </div>
+
+          <div class="flex flex-col gap-6 lg:col-span-5 xl:col-span-4">
+            <Panel id="record-heading" title="Service record">
+              <dl class="grid grid-cols-[auto_1fr] gap-x-4 gap-y-2 text-sm">
+                <dt class="text-ink-faint">Created</dt>
+                <dd>
+                  {agent.created ? (
+                    <time datetime={agent.created}>{formatDate(agent.created)}</time>
+                  ) : (
+                    'Unknown'
+                  )}
+                </dd>
+                <dt class="text-ink-faint">Place</dt>
+                <dd>{place}</dd>
+                <dt class="text-ink-faint">Model</dt>
+                <dd>{def?.model ?? 'Inherited'}</dd>
+                <dt class="text-ink-faint">In roster</dt>
+                <dd class:list={[!agent.inRoster && 'text-warn']}>
+                  {agent.inRoster ? 'Yes' : 'No'}
+                </dd>
+                <dt class="text-ink-faint">Definition</dt>
+                <dd class="min-w-0 break-all">
+                  {def ? (
+                    <code class="text-xs">{def.file}</code>
+                  ) : agent.isMain ? (
+                    'None (main agent)'
+                  ) : (
+                    <span class="text-warn">Missing</span>
+                  )}
+                </dd>
+              </dl>
+            </Panel>
+
+            <Panel id="tools-heading" title="Tools">
+              {def && def.tools.length > 0 ? (
+                <ul class="flex flex-wrap gap-1.5" aria-label="Tools from the definition">
+                  {def.tools.map((tool) => (
+                    <li class="chip font-mono">{tool}</li>
+                  ))}
+                </ul>
+              ) : (
+                <p class="text-sm text-ink-muted">
+                  {agent.rosterTools
+                    ? agent.rosterTools.trim().toLowerCase() === 'all'
+                      ? 'All tools, as the roster lists.'
+                      : `From the roster: ${agent.rosterTools}`
+                    : 'No tools are listed.'}
+                </p>
+              )}
+              {def && def.tools.length > 0 && agent.rosterTools && (
+                <p class="mt-3 text-xs text-ink-faint">
+                  Roster: <span class="text-ink-muted">{agent.rosterTools}</span>
+                </p>
+              )}
+            </Panel>
+
+            <Panel id="skills-heading" title="Skills">
+              {def && def.skills.length > 0 ? (
+                <ul class="flex flex-wrap gap-1.5" aria-label="Preloaded skills">
+                  {def.skills.map((skill) => (
+                    <li class="chip border-gold/50 font-mono text-gold">{skill}</li>
+                  ))}
+                </ul>
+              ) : (
+                <p class="text-sm text-ink-muted">No skills are preloaded.</p>
+              )}
+            </Panel>
+
+            <Panel id="audit-heading" title="Record of strikes" eyebrow="From the Audit Hall">
+              <RecordList
+                records={auditRecords}
+                showWing={false}
+                label={`Audit logs about ${agent.name}`}
+                emptyTitle="A clean record"
+                emptyMessage={`No audit log in the Audit Hall names ${agent.name}.`}
+              />
+            </Panel>
+          </div>
+        </div>
+      </div>
+    </>
+  )}
+</Shell>

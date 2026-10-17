@@ -1,0 +1,84 @@
+---
+/**
+ * The Soul Binder: the departed agents, bound for ever. A respectful empty state while
+ * nobody has been retired. Server-rendered; the island follows the live snapshot.
+ * Owner: Luka.
+ */
+import ErrorState from '../components/ErrorState.svelte';
+import PageHeader from '../components/PageHeader.astro';
+import Panel from '../components/Panel.astro';
+import Starfield from '../components/Starfield.astro';
+import LiveSoulBinder from '../components/live/LiveSoulBinder.svelte';
+import Shell from '../layouts/Shell.astro';
+import { PATHS } from '../server/constants';
+import { recordHref } from '../ui/labels';
+import { loadSnapshot } from '../server/handlers/page-snapshot';
+
+const { snapshot, error } = await loadSnapshot();
+const now = Date.now();
+const retryHref = Astro.url.pathname;
+if (!snapshot) Astro.response.status = 503;
+---
+
+<Shell
+  title="The Soul Binder"
+  generatedAt={snapshot?.generatedAt ?? null}
+  now={now}
+  rootName={snapshot?.rootName ?? null}
+>
+  <PageHeader
+    eyebrow="Hueco Mundo · The departed"
+    title="The Soul Binder"
+    lede="The names of retired members of The Council, bound here for ever."
+  />
+
+  {error && (
+    <div class="mb-6">
+      <ErrorState
+        title="The Soul Binder could not be read"
+        message={`${error} The page will fill in by itself if live updates recover.`}
+        retryHref={retryHref}
+      />
+    </div>
+  )}
+
+  <div class="flex flex-col gap-6">
+    <section
+      aria-labelledby="departed-heading"
+      class="panel relative isolate overflow-hidden p-4 sm:p-6"
+    >
+      <Starfield seed={777} count={46} />
+      <h2 id="departed-heading" class="sr-only">
+        The departed
+      </h2>
+      <LiveSoulBinder
+        client:load
+        initial={snapshot?.retired ?? null}
+        error={error}
+        retryHref={retryHref}
+        level={3}
+      />
+    </section>
+
+    <Panel id="records-heading" title="Where their records rest" eyebrow="Related">
+      <p class="max-w-prose text-ink-muted">
+        Each departed member of The Council leaves an audit log in the Audit Hall and their
+        definition in the Reliquary.
+      </p>
+      <ul class="mt-4 flex flex-wrap gap-x-5 gap-y-2 text-sm">
+        <li>
+          <a href={recordHref(PATHS.soulBinder)}>Open the Soul Binder itself</a>
+        </li>
+        <li>
+          <a href="/limforia?wing=audit-hall">The Audit Hall</a>
+        </li>
+        <li>
+          <a href="/limforia?wing=reliquary">The Reliquary</a>
+        </li>
+        <li>
+          <a href="/host">The Council</a>
+        </li>
+      </ul>
+    </Panel>
+  </div>
+</Shell>

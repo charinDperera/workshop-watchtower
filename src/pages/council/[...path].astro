@@ -1,0 +1,8 @@
+---
+/**
+ * /council and /council/<name> lead to The Council's canonical pages under /host, so either
+ * address works. Only the first segment is kept, and it is encoded again.
+ */
+const segment = (Astro.params.path ?? '').split('/')[0] ?? '';
+return Astro.redirect(segment ? `/host/${encodeURIComponent(segment)}` : '/host', 301);
+---

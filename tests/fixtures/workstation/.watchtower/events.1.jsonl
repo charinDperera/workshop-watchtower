@@ -1,0 +1,7 @@
+{"ts":"2026-09-30T09:00:00.000Z","event":"SessionStart","session":"s0","agent":"michael","source":"startup"}
+{"ts":"2026-09-30T09:00:01.000Z","event":"SubagentStart","session":"s0","agent":"peter","agentId":"agent-q0"}
+{"ts":"2026-09-30T09:00:02.000Z","event":"PreToolUse","session":"s0","agent":"peter","agentId":"agent-q0","tool":"Bash","toolUseId":"u1"}
+{"ts":"2026-09-30T09:00:03.000Z","event":"PostToolUseFailure","session":"s0","agent":"peter","agentId":"agent-q0","tool":"Bash","toolUseId":"u1"}
+{"truncated by a crash
+{"ts":"2026-09-30T09:00:04.000Z","event":"SubagentStop","session":"s0","agent":"peter","agentId":"agent-q0"}
+{"ts":"2026-09-30T09:00:05.000Z","event":"SessionEnd","session":"s0","agent":"michael","reason":"other"}

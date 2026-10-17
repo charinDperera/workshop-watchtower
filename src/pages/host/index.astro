@@ -1,0 +1,59 @@
+---
+/**
+ * The Council: every agent of the roster as a live hierarchy (Overseers, Counsel and the
+ * stations of the Order of Work), plus a word on the departed.
+ */
+import ErrorState from '../../components/ErrorState.svelte';
+import PageHeader from '../../components/PageHeader.astro';
+import LiveCouncil from '../../components/live/LiveCouncil.svelte';
+import Shell from '../../layouts/Shell.astro';
+import { councilSeed, councilTiers } from '../../ui/council';
+import { plural } from '../../ui/format';
+import { loadSnapshot } from '../../server/handlers/page-snapshot';
+
+const { snapshot, error } = await loadSnapshot();
+const now = Date.now();
+const retryHref = Astro.url.pathname;
+const retired = snapshot?.retired.length ?? 0;
+const tiers = snapshot ? councilTiers(snapshot.agents, snapshot.pipeline) : null;
+const lede = tiers
+  ? `${plural(tiers.count, 'agent')} serve the workstation: ${plural(tiers.overseers.length, 'overseer')}, ${tiers.counsel.length} in counsel and ${plural(tiers.stations.length, 'station')} in the Order of Work.`
+  : 'The agents who serve the workstation, from the Overseer to the Order of Work.';
+---
+
+<Shell
+  title="The Council"
+  generatedAt={snapshot?.generatedAt ?? null}
+  now={now}
+  rootName={snapshot?.rootName ?? null}
+>
+  <PageHeader eyebrow="The Watchtower" title="The Council" lede={lede} />
+
+  {error && (
+    <div class="mb-6">
+      <ErrorState title="The Council could not be read" message={error} retryHref={retryHref} />
+    </div>
+  )}
+
+  <div class="flex flex-col gap-6">
+    <section aria-label="The hierarchy of The Council" class="panel-illuminated p-4 sm:p-8">
+      <LiveCouncil
+        client:load
+        initial={snapshot ? councilSeed(snapshot) : null}
+        now={now}
+        error={error}
+        retryHref={retryHref}
+        level={2}
+      />
+    </section>
+
+    {snapshot && (
+      <p class="text-sm text-ink-muted">
+        {retired === 0
+          ? 'No agent has been retired. The Soul Binder is empty.'
+          : `${plural(retired, 'agent')} rest in the Soul Binder.`}{' '}
+        <a href="/soul-binder">Visit the Soul Binder</a>
+      </p>
+    )}
+  </div>
+</Shell>

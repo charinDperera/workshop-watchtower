@@ -1,0 +1,9 @@
+{"ts":"2026-10-01T12:00:00.000Z","event":"SessionStart","session":"s1","agent":"michael","source":"startup"}
+{"ts":"2026-10-01T12:00:01.000Z","event":"UserPromptSubmit","session":"s1","agent":"michael"}
+{"ts":"2026-10-01T12:00:02.000Z","event":"SubagentStart","session":"s1","agent":"paul","agentId":"agent-p1"}
+{"ts":"2026-10-01T12:00:03.000Z","event":"PreToolUse","session":"s1","agent":"paul","agentId":"agent-p1","tool":"Edit","toolUseId":"t1"}
+this line is not json
+{"ts":"2026-10-01T12:00:04.000Z","event":"PostToolUse","session":"s1","agent":"paul","agentId":"agent-p1","tool":"Edit","toolUseId":"t1"}
+{"event":"PreToolUse","agent":"paul"}
+{"ts":"2026-10-01T12:00:05.000Z","event":"SubagentStop","session":"s1","agent":"paul","agentId":"agent-p1"}
+{"ts":"2026-10-01T12:00:06.000Z","event":"Stop","session":"s1","agent":"michael"}

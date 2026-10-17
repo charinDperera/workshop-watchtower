@@ -1,0 +1,125 @@
+---
+/**
+ * The frame of every page: skip link, header (wordmark, live indicator, theme toggle),
+ * primary navigation for every route in SPEC section 6, the main landmark and a footer
+ * with the snapshot's generation time.
+ *
+ * Pages load the snapshot themselves and pass `generatedAt` and `now` down.
+ */
+// Lato, Latin subset only: the faces the type tokens use (global.css, --font-weight-*).
+// The latin-ext files are under Vite's 4 KB inline limit and would become data: URIs,
+// which the font-src 'self' policy blocks; extended characters fall back to system sans.
+import '@fontsource/lato/latin-300.css';
+import '@fontsource/lato/latin-400.css';
+import '@fontsource/lato/latin-400-italic.css';
+import '@fontsource/lato/latin-700.css';
+import '@fontsource/lato/latin-900.css';
+import '@fontsource-variable/jetbrains-mono/wght.css';
+import '../styles/global.css';
+import HeadScript from '../components/HeadScript.astro';
+import SiteMark from '../components/SiteMark.astro';
+import Starfield from '../components/Starfield.astro';
+import ThemeToggle from '../components/ThemeToggle.astro';
+import LiveGeneratedAt from '../components/live/LiveGeneratedAt.svelte';
+import LiveStatus from '../components/live/LiveStatus.svelte';
+import { NAV } from '../ui/labels';
+
+interface Props {
+  /** Page title; " · The Watchtower" is appended. */
+  title: string;
+  description?: string;
+  generatedAt: string | null;
+  /** Server render time (ms), the reference for relative times. */
+  now: number;
+  rootName?: string | null;
+}
+const {
+  title,
+  description = 'A live view of the workstation: The Council of agents, the Great Archive and the laws.',
+  generatedAt,
+  now,
+  rootName = null,
+} = Astro.props;
+const path = Astro.url.pathname;
+---
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="color-scheme" content="dark light" />
+    <meta name="description" content={description} />
+    <meta name="robots" content="noindex, nofollow" />
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <title>{title === 'The Watchtower' ? title : `${title} · The Watchtower`}</title>
+    <HeadScript />
+  </head>
+  <body class="flex min-h-dvh flex-col bg-night text-ink">
+    <a
+      href="#main"
+      class="sr-only-focusable fixed top-2 left-2 z-50 rounded-md bg-gold px-4 py-2 font-semibold text-on-gold no-underline"
+    >
+      Skip to content
+    </a>
+
+    <header class="relative isolate overflow-hidden border-b border-line">
+      <Starfield />
+      <div class="mx-auto flex max-w-page flex-wrap items-center justify-between gap-x-2 gap-y-3 px-4 sm:gap-3 pt-4 pb-3 sm:px-6 lg:px-8">
+        <SiteMark rootName={rootName} />
+        <div class="flex items-center gap-1.5 sm:gap-2">
+          <div class="js-only">
+            <LiveStatus client:load />
+          </div>
+          <noscript>
+            <p class="chip" title="JavaScript is off, so the page does not update by itself">
+              Static snapshot
+            </p>
+          </noscript>
+          <ThemeToggle />
+        </div>
+      </div>
+      <nav aria-label="Primary" class="mx-auto max-w-page px-2 sm:px-4 lg:px-6">
+        <ul class="flex flex-wrap gap-x-1">
+          {NAV.map((item) => {
+            const current = item.match(path);
+            return (
+              <li>
+                <a
+                  href={item.href}
+                  aria-current={current ? 'page' : undefined}
+                  class:list={[
+                    'relative block rounded-t-md px-3 py-2.5 text-sm font-medium no-underline transition-colors duration-(--duration-fast)',
+                    'after:absolute after:inset-x-3 after:bottom-0 after:h-0.5 after:rounded-full after:content-[""]',
+                    current
+                      ? 'text-ink after:bg-gold'
+                      : 'text-ink-muted hover:text-ink hover:after:bg-line-strong',
+                  ]}
+                >
+                  {item.label}
+                </a>
+              </li>
+            );
+          })}
+        </ul>
+      </nav>
+    </header>
+
+    <main
+      id="main"
+      tabindex="-1"
+      class="mx-auto outline-none w-full max-w-page flex-1 px-4 py-6 sm:px-6 lg:px-8 lg:py-8"
+    >
+      <slot />
+    </main>
+
+    <footer class="border-t border-line">
+      <div class="mx-auto flex max-w-page flex-col gap-1 px-4 py-4 text-xs text-ink-faint sm:flex-row sm:items-center sm:justify-between sm:px-6 lg:px-8">
+        <p>
+          <LiveGeneratedAt client:load initial={generatedAt} now={now} />
+        </p>
+        <p>A read-only watch over {rootName ?? 'the workstation'}, served on this machine only.</p>
+      </div>
+    </footer>
+  </body>
+</html>

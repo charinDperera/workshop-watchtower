@@ -1,0 +1,244 @@
+---
+/**
+ * The full activity timeline, filterable by agent and event (a GET form), with "Older"
+ * pages through `before` (plain links). The newest page is live; older pages are fixed
+ * history. The page reads the log through the same logic as `GET /api/activity`
+ * (Paul's), so both always agree. Owner: Luka.
+ */
+import ActivityFeed from '../components/ActivityFeed.svelte';
+import ErrorState from '../components/ErrorState.svelte';
+import PageHeader from '../components/PageHeader.astro';
+import Panel from '../components/Panel.astro';
+import LiveTimeline from '../components/live/LiveTimeline.svelte';
+import Shell from '../layouts/Shell.astro';
+import { pageActivity } from '../server/services/activity-history';
+import { parseActivityQuery } from '../server/schemas/activity-query';
+import { readEventLog } from '../server/sources/event-log';
+import { createWorkstationFs } from '../server/sources/workstation-fs';
+import { getRuntime } from '../server/live/runtime';
+import { HOOK_EVENTS, type ActivityPage } from '../shared/types';
+import { activityQuery, EVENT_LABELS, PAGE_SIZE, parseActivityFilter } from '../ui/activity-page';
+import {
+  agentRefs,
+  formatDateTime,
+  isUnattributed,
+  plural,
+  UNATTRIBUTED_LABEL,
+} from '../ui/format';
+import { nameWithTitle } from '../ui/agent-title';
+import { loadSnapshot } from '../server/handlers/page-snapshot';
+
+const { snapshot, error } = await loadSnapshot();
+const now = Date.now();
+const retryHref = Astro.url.pathname;
+
+const { filter, ignored } = parseActivityFilter(Astro.url.searchParams);
+const filtered = filter.agent !== null || filter.event !== null;
+
+let page: ActivityPage | null = null;
+let pageError: string | null = null;
+const query = parseActivityQuery(
+  new URLSearchParams(activityQuery({ ...filter, limit: PAGE_SIZE }).slice(1)),
+);
+if (!query.ok) {
+  pageError = query.error;
+} else {
+  try {
+    const log = await readEventLog(createWorkstationFs(getRuntime().root));
+    page = pageActivity(log.events, query.query);
+  } catch (err) {
+    console.error(`[watchtower] /activity log failed: ${(err as Error).message}`);
+    pageError = 'The activity log could not be read.';
+  }
+}
+if (!page) Astro.response.status = 503;
+
+const refs = snapshot ? agentRefs(snapshot.agents) : null;
+const known = new Set(refs?.map((a) => a.slug) ?? []);
+// Slugs in the log that are not (or no longer) in The Council still get an option.
+const strays = [
+  ...new Set(
+    [...(page?.events ?? []), ...(snapshot?.activity.events ?? [])]
+      .map((e) => e.agent)
+      .concat(filter.agent ? [filter.agent] : [])
+      .filter((s) => !known.has(s)),
+  ),
+].sort();
+const agentOptions = [
+  ...(snapshot?.agents ?? []).map((a) => ({ value: a.slug, label: nameWithTitle(a) })),
+  ...strays.map((s) => ({ value: s, label: isUnattributed(s) ? UNATTRIBUTED_LABEL : s })),
+];
+
+const agentName = filter.agent
+  ? (refs?.find((a) => a.slug === filter.agent)?.name ??
+    (isUnattributed(filter.agent) ? UNATTRIBUTED_LABEL : filter.agent))
+  : null;
+const eventLabel = filter.event ? (EVENT_LABELS[filter.event] ?? filter.event) : null;
+const newestHref = `/activity${activityQuery({ agent: filter.agent, event: filter.event })}`;
+const olderHref = page?.nextBefore
+  ? `/activity${activityQuery({ agent: filter.agent, event: filter.event, before: page.nextBefore })}`
+  : null;
+// The live page keeps everything down to its oldest event; older ones belong to "Older".
+const floor = page?.nextBefore ? (page.events[page.events.length - 1]?.ts ?? null) : null;
+
+const summary = page
+  ? filtered
+    ? `${plural(page.total, 'event')} in the log match these filters.`
+    : `${plural(page.total, 'event')} in the log.`
+  : null;
+
+const whose = [eventLabel ? `"${eventLabel}"` : null, agentName ? `from ${agentName}` : null]
+  .filter(Boolean)
+  .join(' ');
+const emptyTitle = filter.before ? 'Nothing older' : filtered ? 'No matching events' : undefined;
+const emptyMessage = filter.before
+  ? 'There are no older events that match.'
+  : filtered
+    ? `No ${whose ? `${whose} ` : ''}events are in the log yet. New ones appear here as they happen.`
+    : undefined;
+---
+
+<Shell
+  title="Activity"
+  generatedAt={snapshot?.generatedAt ?? null}
+  now={now}
+  rootName={snapshot?.rootName ?? null}
+>
+  <PageHeader
+    eyebrow="The timeline"
+    title="Activity"
+    lede="Every hook event The Council has written: sessions, prompts, tools and summons. Only names, tools and times are kept, never prompts or contents."
+  />
+
+  {error && (
+    <div class="mb-6">
+      <ErrorState
+        title="The workstation could not be read"
+        message={`${error} The page will fill in by itself if live updates recover.`}
+        retryHref={retryHref}
+      />
+    </div>
+  )}
+
+  <Panel
+    id="timeline-heading"
+    title={filter.before ? 'Older events' : 'Newest events'}
+    eyebrow={filter.before ? 'History' : 'Live'}
+  >
+    <div class="flex flex-col gap-4">
+      <form
+        method="get"
+        action="/activity"
+        class="grid grid-cols-2 items-end gap-3 rounded-md border border-line bg-surface-sunken p-3 md:grid-cols-[1fr_1fr_auto]"
+        aria-label="Filter the timeline"
+      >
+        <div class="field">
+          <label for="filter-agent" class="field-label">
+            Agent
+          </label>
+          <select id="filter-agent" name="agent" class="select">
+            <option value="" selected={!filter.agent}>
+              Every agent
+            </option>
+            {agentOptions.map((o) => (
+              <option value={o.value} selected={filter.agent === o.value}>
+                {o.label}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div class="field">
+          <label for="filter-event" class="field-label">
+            Event
+          </label>
+          <select id="filter-event" name="event" class="select">
+            <option value="" selected={!filter.event}>
+              Every event
+            </option>
+            {HOOK_EVENTS.map((name) => (
+              <option value={name} selected={filter.event === name}>
+                {EVENT_LABELS[name] ?? name}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div class="col-span-2 flex flex-wrap items-center gap-3 md:col-span-1">
+          <button type="submit" class="btn btn-primary">
+            Apply filters
+          </button>
+          {filtered && (
+            <a href="/activity" class="btn btn-quiet">
+              Clear filters
+            </a>
+          )}
+        </div>
+      </form>
+
+      {ignored.length > 0 && (
+        <p class="rounded-md border border-warn/60 bg-warn-soft p-3 text-sm text-ink" role="status">
+          Ignored a filter that could not be read: {ignored.join(', ')}.
+        </p>
+      )}
+
+      {filter.before && (
+        <div class="flex flex-col gap-1 text-sm text-ink-muted">
+          <p>
+            This page is history and does not update. It holds the events before{' '}
+            <time datetime={filter.before} class="figure text-ink">
+              {formatDateTime(filter.before)}
+            </time>
+          </p>
+          <p>
+            <a href={newestHref}>Back to the newest events</a>
+          </p>
+        </div>
+      )}
+      {summary && <p class="text-sm text-ink-muted">{summary}</p>}
+
+      {filter.before ? (
+        <ActivityFeed
+          events={page?.events ?? null}
+          agents={refs}
+          now={now}
+          limit={page?.events.length ?? PAGE_SIZE}
+          showAgent={filter.agent === null}
+          error={page ? null : (pageError ?? error ?? 'The activity log could not be read.')}
+          retryHref={retryHref}
+          label="Older activity"
+          emptyTitle={emptyTitle}
+          emptyMessage={emptyMessage}
+        />
+      ) : (
+        <LiveTimeline
+          client:load
+          initial={page?.events ?? null}
+          agents={refs}
+          agent={filter.agent}
+          event={filter.event}
+          floor={floor}
+          now={now}
+          error={page ? null : (pageError ?? error ?? 'The activity log could not be read.')}
+          retryHref={retryHref}
+          emptyTitle={emptyTitle}
+          emptyMessage={emptyMessage}
+        />
+      )}
+
+      {(olderHref || filter.before) && (
+        <nav
+          aria-label="Pages of the timeline"
+          class="flex flex-wrap items-center justify-between gap-3 border-t border-line pt-4 text-sm"
+        >
+          {filter.before ? <a href={newestHref}>Newest events</a> : <span></span>}
+          {olderHref ? (
+            <a href={olderHref} rel="next" class="inline-flex items-center gap-1">
+              Older events<span aria-hidden="true"> →</span>
+            </a>
+          ) : (
+            <span class="text-ink-faint">This is the oldest page.</span>
+          )}
+        </nav>
+      )}
+    </div>
+  </Panel>
+</Shell>

@@ -1,0 +1,35 @@
+---
+/** Not found: unknown routes and unknown agent names. */
+import EmptyState from '../components/EmptyState.svelte';
+import PageHeader from '../components/PageHeader.astro';
+import Shell from '../layouts/Shell.astro';
+import { NAV } from '../ui/labels';
+import { loadSnapshot } from '../server/handlers/page-snapshot';
+
+Astro.response.status = 404;
+const { snapshot } = await loadSnapshot();
+const now = Date.now();
+---
+
+<Shell
+  title="Not found"
+  generatedAt={snapshot?.generatedAt ?? null}
+  now={now}
+  rootName={snapshot?.rootName ?? null}
+>
+  <PageHeader eyebrow="404" title="Nothing is kept here" />
+  <EmptyState
+    title="This page is not in the archive"
+    message="The address may be mistyped, or the agent or record it names does not exist."
+    icon="star"
+  />
+  <nav aria-label="Where to go instead" class="mt-6">
+    <ul class="flex flex-wrap justify-center gap-x-4 gap-y-2 text-sm">
+      {NAV.map((item) => (
+        <li>
+          <a href={item.href}>{item.label}</a>
+        </li>
+      ))}
+    </ul>
+  </nav>
+</Shell>

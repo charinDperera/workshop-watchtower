@@ -1,0 +1,168 @@
+---
+/**
+ * Overview: The Council at a glance (the hierarchy, live), the Order of Work, the archive, the laws, the latest
+ * commits and the live activity feed. Server-rendered from the snapshot; islands keep
+ * every panel live.
+ */
+import ErrorState from '../components/ErrorState.svelte';
+import PageHeader from '../components/PageHeader.astro';
+import Panel from '../components/Panel.astro';
+import LiveActivity from '../components/live/LiveActivity.svelte';
+import LiveCommits from '../components/live/LiveCommits.svelte';
+import LiveCompliance from '../components/live/LiveCompliance.svelte';
+import LiveCouncil from '../components/live/LiveCouncil.svelte';
+import LiveOverviewStats from '../components/live/LiveOverviewStats.svelte';
+import LivePipeline from '../components/live/LivePipeline.svelte';
+import LiveWings from '../components/live/LiveWings.svelte';
+import Shell from '../layouts/Shell.astro';
+import { councilSeed } from '../ui/council';
+import { agentRefs } from '../ui/format';
+import { loadSnapshot } from '../server/handlers/page-snapshot';
+import { overviewTiles } from '../ui/stats';
+
+const { snapshot, error } = await loadSnapshot();
+const now = Date.now();
+const retryHref = Astro.url.pathname;
+
+const FEED_LIMIT = 14;
+const COMMIT_LIMIT = 5;
+
+const refs = snapshot ? agentRefs(snapshot.agents) : null;
+const repo = snapshot?.git.workstation ?? null;
+const repoError = repo
+  ? (repo.error ?? (repo.isRepo ? null : 'The workstation is not a git repository.'))
+  : error;
+// Islands only need what they show first; the stream brings the rest.
+const feedSeed = snapshot
+  ? snapshot.activity.events.filter((e) => e.event !== 'PostToolUse').slice(0, FEED_LIMIT)
+  : null;
+---
+
+<Shell
+  title="Overview"
+  generatedAt={snapshot?.generatedAt ?? null}
+  now={now}
+  rootName={snapshot?.rootName ?? null}
+>
+  <PageHeader
+    eyebrow="Overview"
+    title="The Council at a glance"
+    lede="Who is at work, where the Order of Work stands, and whether the laws are kept."
+  />
+
+  {error && (
+    <div class="mb-6">
+      <ErrorState
+        title="The workstation could not be read"
+        message={`${error} The page will fill in by itself if live updates recover.`}
+        retryHref={retryHref}
+      />
+    </div>
+  )}
+
+  <div class="flex flex-col gap-6">
+    <Panel
+      id="council-heading"
+      title="The Council"
+      eyebrow="The hierarchy, live"
+      moreHref="/host"
+      moreLabel="Open The Council"
+      illuminated
+    >
+      <LiveCouncil
+        client:load
+        initial={snapshot ? councilSeed(snapshot) : null}
+        now={now}
+        error={error}
+        retryHref={retryHref}
+      />
+    </Panel>
+
+    <LiveOverviewStats client:load initial={snapshot ? overviewTiles(snapshot) : null} />
+
+    <div class="grid grid-cols-1 gap-6 lg:grid-cols-12">
+      <div class="flex flex-col gap-6 lg:col-span-8">
+        <Panel id="pipeline-heading" title="The Order of Work" eyebrow="Station by station">
+          <LivePipeline
+            client:load
+            initial={snapshot && refs ? { stages: snapshot.pipeline, agents: refs } : null}
+            error={error}
+            retryHref={retryHref}
+          />
+        </Panel>
+
+        <Panel
+          id="archive-heading"
+          title="The Great Archive"
+          eyebrow="Limforia and intel"
+          moreHref="/limforia"
+          moreLabel="Open the archive"
+        >
+          <LiveWings
+            client:load
+            initial={snapshot?.wings ?? null}
+            error={error}
+            retryHref={retryHref}
+          />
+        </Panel>
+      </div>
+
+      <div class="flex flex-col gap-6 lg:col-span-4">
+        <Panel
+          id="activity-heading"
+          title="Activity"
+          eyebrow="Live"
+          moreHref="/activity"
+          moreLabel="Full timeline"
+        >
+          <LiveActivity
+            client:load
+            initial={feedSeed && refs ? { events: feedSeed, agents: refs } : null}
+            now={now}
+            limit={FEED_LIMIT}
+            hideToolEnds
+            error={error}
+            retryHref={retryHref}
+            label="Latest activity"
+          />
+          <p class="mt-3 text-xs text-ink-faint">
+            Tool completions are folded into their starts here.
+          </p>
+        </Panel>
+
+        <Panel
+          id="laws-heading"
+          title="The Laws"
+          eyebrow="Compliance"
+          moreHref="/laws"
+          moreLabel="Every check"
+        >
+          <LiveCompliance
+            client:load
+            initial={snapshot?.compliance ?? null}
+            variant="summary"
+            error={error}
+            retryHref={retryHref}
+          />
+        </Panel>
+
+        <Panel
+          id="commits-heading"
+          title="Latest commits"
+          eyebrow={repo?.branch ? `On ${repo.branch}` : 'Git'}
+          moreHref="/git"
+          moreLabel="All of git"
+        >
+          <LiveCommits
+            client:load
+            initial={repo?.isRepo ? repo.commits.slice(0, COMMIT_LIMIT) : null}
+            now={now}
+            limit={COMMIT_LIMIT}
+            error={repoError}
+            retryHref={retryHref}
+          />
+        </Panel>
+      </div>
+    </div>
+  </div>
+</Shell>

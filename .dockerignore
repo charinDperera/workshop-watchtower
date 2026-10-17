@@ -1,0 +1,39 @@
+# docker-deploy skill minimum
+node_modules
+dist
+.git
+.env
+.env.*
+tests
+playwright-report
+test-results
+*.log
+
+# Host-only folders: pnpm store, local caches and agent scratch, Astro's generated types
+.pnpm-store
+.local
+.astro
+.playwright-mcp
+blob-report
+coverage
+
+# Docs are not needed to build or run the image
+*.md
+**/*.md
+
+# Not part of the server build
+hooks
+Dockerfile
+.dockerignore
+compose.yaml
+compose.*.yaml
+playwright.config.ts
+vitest.config.ts
+eslint.config.js
+.prettierrc
+.prettierignore
+
+# Secrets that must never enter a build context
+*.pem
+*.key
+.npmrc

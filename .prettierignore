@@ -1,0 +1,13 @@
+dist/
+.astro/
+node_modules/
+.pnpm-store/
+.local/
+test-results/
+playwright-report/
+coverage/
+pnpm-lock.yaml
+# Michael's contract, formatted by its owner
+SPEC.md
+# Fixture files are deliberately shaped (including broken cases); never reformat them
+tests/fixtures/

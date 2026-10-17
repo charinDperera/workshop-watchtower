@@ -1,0 +1,25 @@
+# dependencies
+node_modules/
+.pnpm-store/
+
+# build output
+dist/
+.astro/
+
+# environment and secrets
+.env
+.env.*
+
+# test output
+test-results/
+playwright-report/
+blob-report/
+coverage/
+
+# local tool caches kept inside the workstation (pnpm cache, temp)
+.local/
+
+# OS clutter
+Thumbs.db
+desktop.ini
+.DS_Store

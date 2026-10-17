@@ -1,0 +1,51 @@
+---
+/**
+ * A titled section of a page: a panel with an h2 (or the given level), an optional
+ * eyebrow and an optional "more" link. Labelled by its heading for landmarks.
+ * `illuminated` gives it the gilded frame of The Council.
+ */
+interface Props {
+  title: string;
+  /** Unique id for the heading. */
+  id: string;
+  eyebrow?: string;
+  moreHref?: string;
+  moreLabel?: string;
+  level?: 2 | 3;
+  illuminated?: boolean;
+  class?: string;
+}
+const {
+  title,
+  id,
+  eyebrow,
+  moreHref,
+  moreLabel = 'View all',
+  level = 2,
+  illuminated = false,
+  class: className = '',
+} = Astro.props;
+const Heading = `h${level}` as 'h2' | 'h3';
+---
+
+<section
+  class:list={[illuminated ? 'panel-illuminated p-4 sm:p-6' : 'panel p-4 sm:p-5', className]}
+  aria-labelledby={id}
+>
+  <div class="mb-4 flex items-end justify-between gap-3">
+    <div class="min-w-0">
+      {eyebrow && <p class="eyebrow">{eyebrow}</p>}
+      <Heading id={id} class="text-lg text-ink">
+        {title}
+      </Heading>
+    </div>
+    {moreHref && (
+      <a href={moreHref} class="shrink-0 text-sm whitespace-nowrap">
+        {moreLabel}
+        <span class="sr-only">: {title}</span>
+        <span aria-hidden="true"> →</span>
+      </a>
+    )}
+  </div>
+  <slot />
+</section>
