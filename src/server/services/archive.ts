@@ -1,19 +1,48 @@
-import type { ArchiveRecord, CatalogEntry, RecordHeader, WingId, WingSummary } from '../../shared/types';
-import { LIMFORIA_WINGS } from '../constants';
+import type {
+  ArchiveRecord,
+  CatalogEntry,
+  RecordHeader,
+  WingId,
+  WingSummary,
+} from '../../shared/types';
+import { wingTitle } from '../../shared/wings';
+import { PATHS } from '../constants';
 import type { RawCatalogEntry } from '../sources/parse/registers';
 import { slugOf } from './agents';
 
-const WING_ORDER: readonly WingId[] = [...LIMFORIA_WINGS, 'intel'];
+export interface WingFolder {
+  id: WingId;
+  description: string;
+}
 
-/** Record counts per wing, in a fixed order, including empty wings. */
-export function countWings(records: ArchiveRecord[]): WingSummary[] {
-  return WING_ORDER.map((id) => {
+/**
+ * The wings: every `limforia/` subfolder except `logs/` (application logs, not an archive
+ * wing), then `intel`. Described folders come first, in CLAUDE.md's table order, then the
+ * rest by name. Each takes its description from CLAUDE.md, else its folder name.
+ */
+export function discoverWings(
+  limforiaFolders: readonly string[],
+  descriptions: ReadonlyMap<string, string>,
+): WingFolder[] {
+  const logs = PATHS.logs.split('/').slice(1).join('/');
+  const folders = limforiaFolders.filter((name) => name !== logs);
+  const described = [...descriptions.keys()].filter((name) => folders.includes(name));
+  const rest = folders.filter((name) => !descriptions.has(name)).sort();
+  return [...described, ...rest, PATHS.intel].map((id) => ({
+    id,
+    description: descriptions.get(id) ?? id,
+  }));
+}
+
+/** Record counts per wing, in the given order, including empty wings. */
+export function countWings(records: ArchiveRecord[], wings: readonly WingFolder[]): WingSummary[] {
+  return wings.map(({ id, description }) => {
     const inWing = records.filter((r) => r.wing === id);
     const subWings: Record<string, number> = {};
     for (const record of inWing) {
       if (record.subWing) subWings[record.subWing] = (subWings[record.subWing] ?? 0) + 1;
     }
-    return { id, count: inWing.length, subWings };
+    return { id, title: wingTitle(id), description, count: inWing.length, subWings };
   });
 }
 

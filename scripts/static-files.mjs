@@ -83,13 +83,10 @@ export function createStaticHandler(root) {
       res.end();
       return true;
     }
-    await new Promise((done) => {
+    // A read error rejects: the edge (http-server.mjs) logs it once and ends the response.
+    await new Promise((done, fail) => {
       const stream = createReadStream(file);
-      stream.on('error', (err) => {
-        console.error(`[watchtower] cannot send ${urlPath}: ${err.message}`);
-        res.destroy(err);
-        done();
-      });
+      stream.on('error', fail);
       stream.on('end', done);
       stream.pipe(res);
     });

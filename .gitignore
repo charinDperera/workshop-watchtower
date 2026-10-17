@@ -6,9 +6,10 @@ node_modules/
 dist/
 .astro/
 
-# environment and secrets
+# environment and secrets (ADR-006): real env files are never committed
 .env
 .env.*
+!.env.example
 
 # test output
 test-results/

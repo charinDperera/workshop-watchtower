@@ -192,12 +192,22 @@ describe('archive filter', () => {
   });
 
   it('ignores an unknown wing, prototype keys and over-long values', () => {
-    for (const wing of ['nope', '__proto__', 'constructor', 'toString']) {
-      const parsed = parseArchiveFilter(new URLSearchParams({ wing }));
+    // Wings are discovered: with the archive's wings known, any other name is ignored.
+    const known = ['chronicles', 'checkpoints', 'intel'];
+    for (const wing of ['nope', '__proto__', 'constructor', 'toString', '../x', 'a b']) {
+      const parsed = parseArchiveFilter(new URLSearchParams({ wing }), known);
       expect(parsed.filter.wing).toBeNull();
       expect(parsed.ignored).toEqual([`wing "${wing}"`]);
     }
-    expect(isWingId('hasOwnProperty')).toBe(false);
+    expect(isWingId('hasOwnProperty', known)).toBe(false);
+    // A new wing works as soon as it exists, with no app change.
+    expect(
+      parseArchiveFilter(new URLSearchParams({ wing: 'checkpoints' }), known).filter.wing,
+    ).toBe('checkpoints');
+    // Without the list (no snapshot), only malformed names are refused.
+    expect(isWingId('checkpoints')).toBe(true);
+    expect(isWingId('__proto__')).toBe(false);
+    expect(isWingId('../x')).toBe(false);
     const long = parseArchiveFilter(new URLSearchParams({ tag: 'x'.repeat(101), type: '   ' }));
     expect(long.filter.tag).toBeNull();
     expect(long.filter.type).toBeNull();
@@ -632,9 +642,9 @@ describe('overview tiles', () => {
     const s = snapshot({
       records: RECORDS,
       wings: [
-        { id: 'chronicles', count: 2, subWings: {} },
-        { id: 'templates', count: 1, subWings: {} },
-        { id: 'intel', count: 0, subWings: {} },
+        { id: 'chronicles', title: 'Chronicles', description: 'd', count: 2, subWings: {} },
+        { id: 'templates', title: 'Templates', description: 'd', count: 1, subWings: {} },
+        { id: 'intel', title: 'Intel', description: 'd', count: 0, subWings: {} },
       ],
     });
     expect(tile(s, 'records')).toMatchObject({ value: 4, hint: 'Across 1 wing' });

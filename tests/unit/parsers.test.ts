@@ -21,7 +21,11 @@ import {
   isIsoDate,
   parseRecord,
 } from '../../src/server/sources/parse/record';
-import { parseEventLine, parseEvents, splitCompleteLines } from '../../src/server/sources/parse/events';
+import {
+  parseEventLine,
+  parseEvents,
+  splitCompleteLines,
+} from '../../src/server/sources/parse/events';
 import {
   countPorcelain,
   LOG_FORMAT,
@@ -217,7 +221,13 @@ describe('records', () => {
     });
     expect(classifyPath('limforia/chronicles/a.md')).toEqual({ wing: 'chronicles', subWing: null });
     expect(classifyPath('intel/a.md')).toEqual({ wing: 'intel', subWing: null });
-    expect(classifyPath('limforia/odd/a.md').wing).toBe('other');
+    // Any limforia/ subfolder is a wing (wings are discovered), sub-wings are generic.
+    expect(classifyPath('limforia/checkpoints/a.md')).toEqual({
+      wing: 'checkpoints',
+      subWing: null,
+    });
+    expect(classifyPath('limforia/odd/deeper/a.md')).toEqual({ wing: 'odd', subWing: 'deeper' });
+    expect(classifyPath('limforia/README.md')).toEqual({ wing: 'other', subWing: null });
   });
 
   it('takes the first H1 outside code fences', () => {

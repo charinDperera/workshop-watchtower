@@ -9,6 +9,7 @@ import { execFile } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import type { AppRepo, RepoState } from '../../shared/types';
+import { childProcessEnv } from '../config/env';
 import { COMMIT_LIMIT, GIT_TIMEOUT_MS } from '../constants';
 import {
   countPorcelain,
@@ -63,7 +64,7 @@ export function gitEnv(
 
 /** A runner over the real git binary. Arguments are passed as an array; nothing is interpolated. */
 export function createExecGit(options: GitEnvOptions = { safeDirectory: false }): GitRunner {
-  return (cwd, args) => runGit(cwd, args, gitEnv(process.env, cwd, options));
+  return (cwd, args) => runGit(cwd, args, gitEnv(childProcessEnv(), cwd, options));
 }
 
 /** The host runner. */

@@ -45,6 +45,7 @@ export function watchWorkstation(
   root: string,
   handlers: WatcherHandlers,
   debounceMs: number = WATCH_DEBOUNCE_MS,
+  isIgnored: (relPath: string) => boolean = (relPath) => isIgnoredChange(relPath),
 ): WorkstationWatcher {
   const burst = debounce<string>(debounceMs, (paths) => handlers.onChange([...new Set(paths)]));
   let watcher: FSWatcher;
@@ -52,7 +53,7 @@ export function watchWorkstation(
     watcher = watch(root, { recursive: true, persistent: false }, (_type, filename) => {
       // Some platforms omit the name; treat that as "something changed".
       const rel = filename ? normaliseWatchPath(String(filename)) : '';
-      if (rel !== '' && isIgnoredChange(rel)) return;
+      if (rel !== '' && isIgnored(rel)) return;
       if (rel !== '' && isEventLogChange(rel)) handlers.onEventLog();
       burst.push(rel);
     });

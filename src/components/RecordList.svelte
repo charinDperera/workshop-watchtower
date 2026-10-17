@@ -7,7 +7,8 @@
 <script lang="ts">
   import type { ArchiveRecord } from '../shared/types';
   import { formatDate } from '../ui/format';
-  import { recordHref, STATUS_TONE, WING_LABELS } from '../ui/labels';
+  import { recordHref, STATUS_TONE } from '../ui/labels';
+  import { wingTitle } from '../shared/wings';
   import EmptyState from './EmptyState.svelte';
   import ErrorState from './ErrorState.svelte';
   import Icon from './Icon.svelte';
@@ -73,9 +74,7 @@
               {/if}
               {#if showWing}
                 <span
-                  >in {WING_LABELS[record.wing].title}{record.subWing
-                    ? ` / ${record.subWing}`
-                    : ''}</span
+                  >in {wingTitle(record.wing)}{record.subWing ? ` / ${record.subWing}` : ''}</span
                 >
               {/if}
               {#if record.header.agents.length > 0}

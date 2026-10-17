@@ -1,53 +1,75 @@
 // Starts the built Watchtower: `node scripts/start.mjs` (also `pnpm start`, the container CMD).
 //
-// The adapter runs in middleware mode, so this script owns the HTTP server. That puts the
-// request guard (Host and peer policy) and the security headers in front of every request,
-// static files included; in standalone mode the adapter served `dist/client` before any
-// middleware ran.
+// The adapter runs in middleware mode, so this script owns the HTTP server: request ids,
+// the request guard (Host and peer policy) and the security headers sit in front of every
+// request, static files included, and each request is logged once here.
 //
-// On the host it listens on 127.0.0.1 only: the Watchtower must never listen on 0.0.0.0 there
-// (SPEC section 1). Only container mode (WATCHTOWER_CONTAINER=1) honours HOST, defaulting to
-// 0.0.0.0 inside the container; compose then publishes the port on 127.0.0.1 only.
-// PORT is configurable in both (default 4321). See scripts/server-env.mjs for every setting.
+// It validates the environment BEFORE loading the bundle, with the same validator the app
+// uses (scripts/server-env.mjs; see the README), and refuses to start on any problem.
+// On the host it listens on 127.0.0.1 only (SPEC section 1); only container mode
+// (WATCHTOWER_CONTAINER=1) honours HOST. PORT is configurable in both (default 4321).
 import { createServer } from 'node:http';
 import { fileURLToPath } from 'node:url';
+import pkg from '../package.json' with { type: 'json' };
 import { createRequestListener } from './http-server.mjs';
+import { createLogger } from './logger.mjs';
 import { createRequestPolicy } from './request-guard.mjs';
-import { readServerEnv, ServerEnvError } from './server-env.mjs';
+import { readServerEnv, ServerEnvError, summariseServerEnv } from './server-env.mjs';
 import { createStaticHandler } from './static-files.mjs';
+
+// The production launcher: NODE_ENV defaults to production (the app reads the same value).
+process.env.NODE_ENV ??= 'production';
 
 let settings;
 try {
   settings = readServerEnv(process.env);
 } catch (err) {
   if (!(err instanceof ServerEnvError)) throw err;
+  // The one console call in server code: there is no valid LOG_DIR or level to build the
+  // logger from yet. The message names the variables, never their values.
+  // eslint-disable-next-line no-console
   console.error(`[watchtower] refusing to start: ${err.message}`);
   process.exit(1);
 }
 
-// The app reads these too (the middleware validates the same environment).
-process.env.HOST = settings.host;
-process.env.PORT = String(settings.port);
+const { system, forRequest } = createLogger({
+  service: 'bff',
+  env: settings.nodeEnv,
+  level: settings.logLevel,
+  logDir: settings.logDir,
+});
 
 const { handler } = await import('../dist/server/entry.mjs');
 const listener = createRequestListener({
   policy: createRequestPolicy(settings),
   serveStatic: createStaticHandler(fileURLToPath(new URL('../dist/client/', import.meta.url))),
   app: handler,
+  logger: { forRequest },
 });
 
 const server = createServer(listener);
 server.on('error', (err) => {
-  console.error(`[watchtower] server error: ${err.message}`);
+  system.fatal('server.failed', 'Server error', { err });
   process.exit(1);
 });
 server.listen(settings.port, settings.host, () => {
-  console.info(
-    `[watchtower] listening on http://${settings.host}:${settings.port}` +
-      (settings.container ? ' (container mode)' : ''),
-  );
+  system.info('server.started', 'Server started', {
+    version: pkg.version,
+    url: `http://${settings.host}:${settings.port}`,
+    config: summariseServerEnv(settings),
+  });
 });
 
-const shutdown = () => server.close(() => process.exit(0));
-process.on('SIGTERM', shutdown);
-process.on('SIGINT', shutdown);
+const shutdown = (signal) => {
+  system.info('server.stopping', 'Server stopping', { signal });
+  server.close(() => {
+    system.info('server.stopped', 'Server stopped', { version: pkg.version });
+    process.exit(0);
+  });
+  // Open SSE streams keep the server open: close them after a short grace period.
+  setTimeout(() => {
+    server.closeAllConnections();
+  }, 2000).unref();
+};
+process.on('SIGTERM', () => shutdown('SIGTERM'));
+process.on('SIGINT', () => shutdown('SIGINT'));

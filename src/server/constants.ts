@@ -1,5 +1,3 @@
-import type { WingId } from '../shared/types';
-
 export { RECORD_STATUSES, RECORD_TYPES } from '../shared/constants';
 
 /** Fixed workstation-relative locations of the sources (SPEC section 2). */
@@ -17,19 +15,12 @@ export const PATHS = {
   events: '.watchtower/events.jsonl',
   /** The hook logger rotates `events.jsonl` here at 5 MB, keeping one backup (SPEC section 4). */
   eventsBackup: '.watchtower/events.1.jsonl',
+  /** Application logs (ADR-005): not an archive wing, and never watched. */
+  logs: 'limforia/logs',
 } as const;
 
 /** The only Host header values answered by default (defined with the guard). */
 export { DEFAULT_ALLOWED_HOSTS as ALLOWED_HOSTS } from './security/request-guard';
-
-export const LIMFORIA_WINGS: readonly WingId[] = [
-  'chronicles',
-  'audit-hall',
-  'reliquary',
-  'vault-of-ideas',
-  'scriptorium',
-  'templates',
-];
 
 /**
  * The slug the hook logger writes for the main agent (a payload naming no agent). This is the

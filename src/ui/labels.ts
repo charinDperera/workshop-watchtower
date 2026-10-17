@@ -1,22 +1,4 @@
 /** Names and short descriptions for the parts of the workstation, in one place. */
-import type { WingId } from '../shared/types';
-
-export interface WingLabel {
-  title: string;
-  holds: string;
-}
-
-/** From the table in CLAUDE.md, Commandment 5. */
-export const WING_LABELS: Readonly<Record<WingId, WingLabel>> = {
-  chronicles: { title: 'Chronicles', holds: 'Records of archived chats and contexts' },
-  'audit-hall': { title: 'Audit Hall', holds: 'Audit logs of strikes and executions' },
-  reliquary: { title: 'Reliquary', holds: 'Definitions and data of retired agents' },
-  'vault-of-ideas': { title: 'Vault of Ideas', holds: 'Old and shelved project ideas' },
-  scriptorium: { title: 'Scriptorium', holds: 'Features, decisions, caveats and issues' },
-  templates: { title: 'Templates', holds: 'Templates for chronicles and audit logs' },
-  intel: { title: 'Intel', holds: "Uriel's research reports" },
-  other: { title: 'Other', holds: 'Records outside the named wings' },
-};
 
 /**
  * Chip tones for a record's `status` header (Commandment 5). Unknown statuses get none.

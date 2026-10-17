@@ -6,6 +6,7 @@
  * `$effect`, which does not run during SSR), so the module state stays empty there.
  */
 import type { ActivityEvent, Snapshot } from '../../shared/types';
+import { pageName, reportClientError } from '../client-errors';
 import {
   AnnouncementQueue,
   BACKOFF,
@@ -143,6 +144,11 @@ function onServerError(event: Event): void {
     } catch {
       live.snapshotError = 'Snapshot unavailable';
     }
+    reportClientError({
+      msg: 'The server could not build the workstation snapshot for live updates.',
+      where: `${pageName(window.location.pathname)} → Live updates`,
+      errorCode: 'SNAPSHOT_UNAVAILABLE',
+    });
     return;
   }
   scheduleReconnect();
@@ -177,6 +183,13 @@ function scheduleReconnect(): void {
   const offline = typeof navigator !== 'undefined' && navigator.onLine === false;
   live.connection =
     offline || attempt + 1 >= BACKOFF.disconnectedAfter ? 'disconnected' : 'reconnecting';
+  if (live.connection === 'disconnected' && !offline) {
+    reportClientError({
+      msg: 'Live updates stopped: the page could not reconnect to the server.',
+      where: `${pageName(window.location.pathname)} → Live updates`,
+      errorCode: 'LIVE_UPDATES_DISCONNECTED',
+    });
+  }
   const delay = backoffDelay(attempt);
   attempt += 1;
   live.retryAt = Date.now() + delay;

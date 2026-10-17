@@ -35,8 +35,7 @@ export interface ServerEnv {
 export type ServerSettings = Pick<ServerEnv, 'container' | 'trustedClients' | 'allowedHosts'>;
 
 export type LoadedEnv =
-  | { ok: true; env: ServerEnv }
-  | { ok: false; error: string; variables: readonly string[] };
+  { ok: true; env: ServerEnv } | { ok: false; error: string; variables: readonly string[] };
 
 /** Validates an environment map. Never includes a value in the error. */
 export function loadEnv(source: NodeJS.ProcessEnv): LoadedEnv {

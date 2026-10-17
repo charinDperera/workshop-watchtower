@@ -1,8 +1,11 @@
-// The Node request listener behind `scripts/start.mjs`. Every request, static files
-// included, passes the same guard as the Astro middleware and leaves with the security
-// headers. Order: headers, guard, URL check, static file, Astro.
+// The Node request listener behind `scripts/start.mjs` (the production edge). Every request,
+// static files included: request id, security headers, the same guard as the Astro
+// middleware, URL check, static file or Astro, and one log line when the response ends.
 
+import { resolveRequestId } from './logger.mjs';
 import { FALLBACK_CSP, guardRequest, SECURITY_HEADERS } from './request-guard.mjs';
+
+export const REQUEST_ID_HEADER = 'x-request-id';
 
 /** The same JSON body and caching as the app's `errorResponse` (`ApiError`). */
 export function sendError(res, status, error) {
@@ -24,24 +27,49 @@ export function setSecurityHeaders(res) {
   res.setHeader('Content-Security-Policy', FALLBACK_CSP);
 }
 
+/** The path without query or fragment: query values are never logged. */
+const routeOf = (url) => (url ?? '/').split(/[?#]/, 1)[0];
+
 /**
  * @param {{
  *   policy: { allowedHosts: readonly string[], isTrustedPeer(address: string): boolean },
  *   serveStatic: (req: import('node:http').IncomingMessage, res: import('node:http').ServerResponse) => Promise<boolean>,
- *   app: (req: import('node:http').IncomingMessage, res: import('node:http').ServerResponse) => unknown,
- *   log?: Pick<Console, 'warn' | 'error'>,
+ *   app: (req: import('node:http').IncomingMessage, res: import('node:http').ServerResponse, next?: unknown, locals?: object) => unknown,
+ *   logger: { forRequest(requestId: string): { info: Function, warn: Function, error: Function } },
+ *   now?: () => number,
  * }} deps
  */
-export function createRequestListener({ policy, serveStatic, app, log = console }) {
+export function createRequestListener({
+  policy,
+  serveStatic,
+  app,
+  logger,
+  now = () => performance.now(),
+}) {
   return async (req, res) => {
+    const started = now();
+    const requestId = resolveRequestId(req.headers[REQUEST_ID_HEADER]);
+    // Astro sees the same id: as locals, and in the header (replacing a malformed one).
+    req.headers[REQUEST_ID_HEADER] = requestId;
+    res.setHeader(REQUEST_ID_HEADER, requestId);
     setSecurityHeaders(res);
+    const log = logger.forRequest(requestId);
+    res.once('close', () => {
+      log.info('request.completed', 'Request completed', {
+        method: req.method,
+        route: routeOf(req.url),
+        status: res.statusCode,
+        durationMs: Math.round(now() - started),
+      });
+    });
+
     const host = typeof req.headers.host === 'string' ? req.headers.host : null;
     const verdict = guardRequest(
       { host, address: req.socket.remoteAddress ?? null, aborted: req.destroyed },
       policy,
     );
     if (!verdict.allow) {
-      if (verdict.log) log.warn(`[watchtower] ${verdict.log}`);
+      if (verdict.log) log.warn('request.refused', verdict.log, { status: verdict.status });
       return sendError(res, verdict.status, verdict.error);
     }
     try {
@@ -51,9 +79,9 @@ export function createRequestListener({ policy, serveStatic, app, log = console 
     }
     try {
       if (await serveStatic(req, res)) return;
-      await app(req, res);
+      await app(req, res, undefined, { requestId, edgeLogged: true });
     } catch (err) {
-      log.error(`[watchtower] request failed: ${err instanceof Error ? err.message : err}`);
+      log.error('request.failed', 'Request failed', { err });
       if (!res.headersSent) sendError(res, 500, 'Internal error');
       else res.destroy();
     }

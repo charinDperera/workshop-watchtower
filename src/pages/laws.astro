@@ -11,10 +11,8 @@ import LiveCompliance from '../components/live/LiveCompliance.svelte';
 import LiveRecordViewer from '../components/live/LiveRecordViewer.svelte';
 import Shell from '../layouts/Shell.astro';
 import { PATHS } from '../server/constants';
-import { getRuntime } from '../server/live/runtime';
-import { loadRenderedRecord } from '../server/render/record-service';
 import type { RenderedRecord } from '../shared/types';
-import { loadSnapshot } from '../server/handlers/page-snapshot';
+import { loadPageRecord, loadSnapshot } from '../server/handlers/page-snapshot';
 
 const { snapshot, error } = await loadSnapshot();
 const now = Date.now();
@@ -23,17 +21,13 @@ const retryHref = Astro.url.pathname;
 let constitution: RenderedRecord | null = null;
 let lawError: string | null = null;
 let lawStatus: number | null = null;
-try {
-  const result = await loadRenderedRecord(getRuntime().root, PATHS.constitution);
-  if (result.ok) constitution = result.record;
+{
+  const result = await loadPageRecord(PATHS.constitution);
+  if (result.record) constitution = result.record;
   else {
-    lawError = result.error;
+    lawError = result.status === 500 ? 'The Constitution could not be read' : result.error;
     lawStatus = result.status;
   }
-} catch (err) {
-  console.error(`[watchtower] /laws constitution failed: ${(err as Error).message}`);
-  lawError = 'The Constitution could not be read';
-  lawStatus = 500;
 }
 if (!snapshot && !constitution) Astro.response.status = 503;
 ---

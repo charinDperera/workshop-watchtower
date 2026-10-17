@@ -6,6 +6,7 @@
 import { existsSync, statSync } from 'node:fs';
 import { readFile, readdir } from 'node:fs/promises';
 import { join } from 'node:path';
+import { systemLog } from '../logging/logger';
 
 export interface WorkstationFs {
   readonly root: string;
@@ -34,7 +35,10 @@ export function createWorkstationFs(root: string): WorkstationFs {
       return await readFile(absolute(relPath), 'utf8');
     } catch (err) {
       if (isMissing(err)) return null;
-      console.warn(`[watchtower] cannot read ${relPath}: ${(err as Error).message}`);
+      systemLog().warn('source.read_failed', 'Cannot read a workstation file', {
+        path: relPath,
+        err: (err as Error).message,
+      });
       return null;
     }
   };
@@ -47,7 +51,10 @@ export function createWorkstationFs(root: string): WorkstationFs {
         entries = await readdir(absolute(dir), { withFileTypes: true });
       } catch (err) {
         if (!isMissing(err))
-          console.warn(`[watchtower] cannot list ${dir}: ${(err as Error).message}`);
+          systemLog().warn('source.list_failed', 'Cannot list a workstation folder', {
+            path: dir,
+            err: (err as Error).message,
+          });
         return;
       }
       for (const entry of entries) {
@@ -72,7 +79,10 @@ export function createWorkstationFs(root: string): WorkstationFs {
         .sort();
     } catch (err) {
       if (!isMissing(err))
-        console.warn(`[watchtower] cannot list ${relDir}: ${(err as Error).message}`);
+        systemLog().warn('source.list_failed', 'Cannot list a workstation folder', {
+          path: relDir,
+          err: (err as Error).message,
+        });
       return [];
     }
   };

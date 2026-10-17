@@ -44,7 +44,10 @@ export class ClientErrorIntake {
     if (recent.length >= this.limit) {
       this.hits.set(clientKey, recent);
       const oldest = recent[0] ?? now;
-      return { outcome: 'limited', retryAfterSeconds: Math.max(1, Math.ceil((oldest + this.windowMs - now) / 1000)) };
+      return {
+        outcome: 'limited',
+        retryAfterSeconds: Math.max(1, Math.ceil((oldest + this.windowMs - now) / 1000)),
+      };
     }
     recent.push(now);
     this.remember(this.hits, clientKey, recent);

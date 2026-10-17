@@ -19,7 +19,15 @@ export const CONTAINER_DEFAULT_HOST = '0.0.0.0';
 export const POLL_MIN_MS = 250;
 export const POLL_MAX_MS = 60_000;
 export const NODE_ENVS = Object.freeze(['development', 'test', 'production']);
-export const LOG_LEVELS = Object.freeze(['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent']);
+export const LOG_LEVELS = Object.freeze([
+  'fatal',
+  'error',
+  'warn',
+  'info',
+  'debug',
+  'trace',
+  'silent',
+]);
 /** LOG_DIR default, relative to the workstation root (ADR-005). */
 export const DEFAULT_LOG_SUBDIR = 'limforia/logs/watchtower';
 const APP_PACKAGE_NAME = 'watchtower';
@@ -27,9 +35,7 @@ const APP_PACKAGE_NAME = 'watchtower';
 export class ServerEnvError extends Error {
   /** @param {{ variable: string, problem: string }[]} problems */
   constructor(problems) {
-    super(
-      `Invalid environment: ${problems.map((p) => `${p.variable} ${p.problem}`).join('; ')}`,
-    );
+    super(`Invalid environment: ${problems.map((p) => `${p.variable} ${p.problem}`).join('; ')}`);
     this.name = 'ServerEnvError';
     /** Variable names only, never values. */
     this.variables = problems.map((p) => p.variable);
@@ -122,7 +128,8 @@ const entries = (parse, what) =>
     const parsed = [];
     list(text).forEach((entry, index) => {
       const value = parse(entry);
-      if (value === null) ctx.addIssue({ code: 'custom', message: `entry ${index + 1} is not ${what}` });
+      if (value === null)
+        ctx.addIssue({ code: 'custom', message: `entry ${index + 1} is not ${what}` });
       else parsed.push(value);
     });
     return parsed;

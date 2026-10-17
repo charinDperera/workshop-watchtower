@@ -4,7 +4,12 @@
  * nothing that looks like a stack trace is accepted.
  */
 import { z } from 'zod';
-import { BadRequestError, ForbiddenError, PayloadTooLargeError, UnsupportedMediaTypeError } from '../errors/app-error';
+import {
+  BadRequestError,
+  ForbiddenError,
+  PayloadTooLargeError,
+  UnsupportedMediaTypeError,
+} from '../errors/app-error';
 
 /** Largest accepted body. A real report is a few hundred bytes. */
 export const CLIENT_ERROR_MAX_BYTES = 4096;
@@ -49,7 +54,17 @@ export type ClientErrorReport = z.infer<typeof clientErrorReport>;
 export function parseClientErrorReport(body: unknown): ClientErrorReport {
   const parsed = clientErrorReport.safeParse(body);
   if (!parsed.success) {
-    const fields = [...new Set(parsed.error.issues.map((i) => String(i.path[0] ?? 'body')))];
+    // Unknown keys are reported by name only when the name is short and plain (it is the
+    // client's text); the values are never echoed.
+    const fields = [
+      ...new Set(
+        parsed.error.issues.flatMap((i) =>
+          i.code === 'unrecognized_keys'
+            ? i.keys.map((k) => (/^[A-Za-z0-9_]{1,40}$/.test(k) ? k : 'unknown field'))
+            : [String(i.path[0] ?? 'body')],
+        ),
+      ),
+    ];
     throw new BadRequestError(`Invalid report: ${fields.join(', ')}`);
   }
   return parsed.data;
@@ -69,7 +84,10 @@ export function assertSameOrigin(headers: Headers): void {
 }
 
 /** Reads a JSON body of at most `maxBytes`, refusing anything else. */
-export async function readJsonBody(request: Request, maxBytes = CLIENT_ERROR_MAX_BYTES): Promise<unknown> {
+export async function readJsonBody(
+  request: Request,
+  maxBytes = CLIENT_ERROR_MAX_BYTES,
+): Promise<unknown> {
   const type = request.headers.get('content-type') ?? '';
   if (!/^application\/json(?:\s*;|$)/i.test(type)) {
     throw new UnsupportedMediaTypeError('Send application/json');

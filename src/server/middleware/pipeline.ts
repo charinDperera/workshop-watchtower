@@ -63,8 +63,7 @@ export async function handleRequest(
     }
   }
 
-  response = withSecurityHeaders(response);
-  response.headers.set(REQUEST_ID_HEADER, requestId);
+  response = withSecurityHeaders(response, { [REQUEST_ID_HEADER]: requestId });
   if (!context.locals.edgeLogged) {
     log.info('request.completed', 'Request completed', {
       method: context.request.method,

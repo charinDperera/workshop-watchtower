@@ -43,4 +43,41 @@ export default defineConfig([
       ],
     },
   },
+  // ADR-004 Order 3: client code never imports server code (src/server, scripts).
+  {
+    files: ['src/components/**', 'src/ui/**', 'src/layouts/**', 'src/shared/**'],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        {
+          patterns: [
+            {
+              group: ['**/server', '**/server/**', '**/scripts/**'],
+              message: 'Client code may not import server code. Move shared types to src/shared.',
+            },
+          ],
+        },
+      ],
+    },
+  },
+  // ADR-005: server code logs through the logger, never the console.
+  {
+    files: ['src/server/**', 'src/middleware.ts', 'scripts/**'],
+    rules: { 'no-console': 'error' },
+  },
+  // ADR-006: only the config module reads the environment.
+  {
+    files: ['src/**'],
+    ignores: ['src/server/config/env.ts'],
+    rules: {
+      'no-restricted-properties': [
+        'error',
+        {
+          object: 'process',
+          property: 'env',
+          message: 'Read configuration through src/server/config/env.ts.',
+        },
+      ],
+    },
+  },
 ]);

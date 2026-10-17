@@ -5,12 +5,16 @@ import { FALLBACK_CSP, SECURITY_HEADERS } from '../security/request-guard';
  * response with no CSP of its own (pages keep Astro's hashed policy). Applied to every
  * response the middleware returns, refusals and errors included.
  */
-export function withSecurityHeaders(response: Response): Response {
+/** @param extra headers always set (e.g. `x-request-id`), replacing any existing value. */
+export function withSecurityHeaders(
+  response: Response,
+  extra: Readonly<Record<string, string>> = {},
+): Response {
   const missing = Object.entries(SECURITY_HEADERS).filter(([name]) => !response.headers.has(name));
+  missing.push(...Object.entries(extra));
   if (!response.headers.has('content-security-policy')) {
     missing.push(['Content-Security-Policy', FALLBACK_CSP]);
   }
-  if (missing.length === 0) return response;
   try {
     for (const [name, value] of missing) response.headers.set(name, value);
     return response;

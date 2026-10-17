@@ -4,7 +4,7 @@
  */
 import { RECORD_STATUSES, RECORD_TYPES } from '../shared/constants';
 import type { ArchiveRecord, WingId } from '../shared/types';
-import { WING_LABELS } from './labels';
+import { isWingId as isWellFormedWing } from '../shared/wings';
 
 export interface ArchiveFilter {
   wing: WingId | null;
@@ -33,8 +33,12 @@ function clean(value: string | null): string | null {
   return v && v.length <= MAX_VALUE_LENGTH ? v : null;
 }
 
-export function isWingId(value: string): value is WingId {
-  return Object.hasOwn(WING_LABELS, value);
+/**
+ * A wing the filter may use: a well-formed folder name and, when the archive's wings are
+ * known (from the snapshot), one of them. Wings are discovered, never a fixed list.
+ */
+export function isWingId(value: string, known?: readonly string[]): value is WingId {
+  return isWellFormedWing(value) && (known === undefined || known.includes(value));
 }
 
 export interface ParsedFilter {
@@ -43,11 +47,15 @@ export interface ParsedFilter {
   ignored: string[];
 }
 
-export function parseArchiveFilter(params: URLSearchParams): ParsedFilter {
+/** @param knownWings the archive's wing ids, when known; unknown wings are then ignored. */
+export function parseArchiveFilter(
+  params: URLSearchParams,
+  knownWings?: readonly string[],
+): ParsedFilter {
   const ignored: string[] = [];
   const rawWing = clean(params.get('wing'));
   let wing: WingId | null = null;
-  if (rawWing && isWingId(rawWing)) wing = rawWing;
+  if (rawWing && isWingId(rawWing, knownWings)) wing = rawWing;
   else if (rawWing) ignored.push(`wing "${rawWing}"`);
   return {
     filter: {

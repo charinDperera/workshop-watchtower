@@ -16,7 +16,12 @@ import {
   stationId,
   type AgentJoinInput,
 } from '../../src/server/services/agents';
-import { countWings, indexAuditLogs, isStrikeLog } from '../../src/server/services/archive';
+import {
+  countWings,
+  discoverWings,
+  indexAuditLogs,
+  isStrikeLog,
+} from '../../src/server/services/archive';
 import {
   checkCatalogCoverage,
   checkCleanTree,
@@ -416,9 +421,15 @@ describe('archive', () => {
       parseRecord('limforia/scriptorium/issues/b.md', ''),
       parseRecord('intel/c.md', ''),
     ];
-    const wings = countWings(records);
+    const wings = countWings(
+      records,
+      discoverWings(['scriptorium', 'chronicles', 'logs'], new Map([['scriptorium', 'Docs']])),
+    );
+    expect(wings.map((w) => w.id)).toEqual(['scriptorium', 'chronicles', 'intel']);
     expect(wings.find((w) => w.id === 'scriptorium')).toEqual({
       id: 'scriptorium',
+      title: 'Scriptorium',
+      description: 'Docs',
       count: 2,
       subWings: { decisions: 1, issues: 1 },
     });

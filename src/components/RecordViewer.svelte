@@ -9,7 +9,8 @@
   import type { ArchiveRecord, RenderedRecord } from '../shared/types';
   import type { KnownAgent } from '../ui/agent-title';
   import { formatDate } from '../ui/format';
-  import { agentHref, STATUS_TONE, WING_LABELS } from '../ui/labels';
+  import { agentHref, STATUS_TONE } from '../ui/labels';
+  import { wingTitle } from '../shared/wings';
   import { fitRecordHtml } from '../ui/record-html';
   import ErrorState from './ErrorState.svelte';
   import Icon from './Icon.svelte';
@@ -62,7 +63,7 @@
   );
   const place = $derived(
     meta
-      ? `${WING_LABELS[meta.wing].title}${meta.subWing ? ` / ${meta.subWing}` : ''}`
+      ? `${wingTitle(meta.wing)}${meta.subWing ? ` / ${meta.subWing}` : ''}`
       : (eyebrow ?? 'Record'),
   );
   const problem = $derived(

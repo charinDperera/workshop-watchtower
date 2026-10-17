@@ -12,8 +12,6 @@ import LiveRecordViewer from '../components/live/LiveRecordViewer.svelte';
 import LiveRecords from '../components/live/LiveRecords.svelte';
 import LiveWings from '../components/live/LiveWings.svelte';
 import Shell from '../layouts/Shell.astro';
-import { getRuntime } from '../server/live/runtime';
-import { loadRenderedRecord } from '../server/render/record-service';
 import type { RenderedRecord } from '../shared/types';
 import { knownAgents } from '../ui/agent-title';
 import {
@@ -27,15 +25,18 @@ import {
   type FilterOption,
 } from '../ui/archive-filter';
 import { capitalise } from '../ui/format';
-import { WING_LABELS } from '../ui/labels';
-import { loadSnapshot } from '../server/handlers/page-snapshot';
+import { wingTitle } from '../shared/wings';
+import { loadPageRecord, loadSnapshot } from '../server/handlers/page-snapshot';
 
 const { snapshot, error } = await loadSnapshot();
 const now = Date.now();
 const retryHref = Astro.url.pathname;
 
 const params = Astro.url.searchParams;
-const { filter, ignored } = parseArchiveFilter(params);
+const { filter, ignored } = parseArchiveFilter(
+  params,
+  snapshot?.wings.map((w) => w.id),
+);
 const filtered = hasFilter(filter);
 
 // The record viewer: the same guarded logic as GET /api/record.
@@ -48,17 +49,11 @@ if (asked.length > 1) {
   recordError = 'Give exactly one record';
   recordStatus = 400;
 } else if (requested !== null) {
-  try {
-    const result = await loadRenderedRecord(getRuntime().root, requested);
-    if (result.ok) record = result.record;
-    else {
-      recordError = result.error;
-      recordStatus = result.status;
-    }
-  } catch (err) {
-    console.error(`[watchtower] /limforia record failed: ${(err as Error).message}`);
-    recordError = 'The record could not be read';
-    recordStatus = 500;
+  const result = await loadPageRecord(requested);
+  if (result.record) record = result.record;
+  else {
+    recordError = result.status === 500 ? 'The record could not be read' : result.error;
+    recordStatus = result.status;
   }
 }
 const viewing = requested !== null || recordError !== null;
@@ -73,7 +68,7 @@ const meta =
 const closeHref = `/limforia${archiveQuery(filter)}`;
 
 const wingOptions = snapshot
-  ? snapshot.wings.map((w) => ({ value: w.id, label: WING_LABELS[w.id].title, count: w.count }))
+  ? snapshot.wings.map((w) => ({ value: w.id, label: w.title, count: w.count }))
   : [];
 
 interface Field {
@@ -105,7 +100,7 @@ const fields: Field[] = options
     ]
   : [];
 
-const recordsEyebrow = filter.wing ? `In ${WING_LABELS[filter.wing].title}` : 'Every wing';
+const recordsEyebrow = filter.wing ? `In ${wingTitle(filter.wing)}` : 'Every wing';
 ---
 
 <Shell

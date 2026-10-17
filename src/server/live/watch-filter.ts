@@ -6,6 +6,8 @@
  * `.git/HEAD` and `.git/logs/HEAD` are kept so commits refresh the snapshot.
  */
 
+import { PATHS } from '../constants';
+
 const IGNORED_SEGMENTS = new Set(['node_modules', 'dist']);
 /** This app's generated folders: `.astro` (types), `.pnpm-store`, `.local` (caches). */
 const IGNORED_APP_SEGMENTS = new Set([
@@ -21,8 +23,20 @@ export function normaliseWatchPath(filename: string): string {
   return filename.replace(/\\/g, '/').replace(/^\.\//, '');
 }
 
-export function isIgnoredChange(relPath: string): boolean {
-  const segments = normaliseWatchPath(relPath).split('/');
+/** True when `relPath` is `prefix` or below it. */
+function isUnder(relPath: string, prefix: string): boolean {
+  return relPath === prefix || relPath.startsWith(`${prefix}/`);
+}
+
+/**
+ * Ignored changes. Application logs (`limforia/logs/`, plus `extraPrefixes` such as a
+ * LOG_DIR inside the workstation) are always ignored: the app writes there, so watching
+ * them would rebuild the snapshot on every log line, which logs again, forever.
+ */
+export function isIgnoredChange(relPath: string, extraPrefixes: readonly string[] = []): boolean {
+  const normal = normaliseWatchPath(relPath);
+  if ([PATHS.logs, ...extraPrefixes].some((prefix) => isUnder(normal, prefix))) return true;
+  const segments = normal.split('/');
   if (segments.some((s) => IGNORED_SEGMENTS.has(s) || IGNORED_APP_SEGMENTS.has(s))) return true;
   const gitIndex = segments.indexOf('.git');
   if (gitIndex !== -1 && segments[gitIndex + 1] === 'objects') return true;

@@ -22,7 +22,7 @@ Everything else in ADR-001 still applies. The only deviation is the Node adapter
 
 ## 2. Data sources (read-only)
 
-The workstation root is `WATCHTOWER_ROOT` (env), defaulting to the folder two levels above the app (`F:\Projects`). The app **never writes** into the workstation.
+The workstation root is `WATCHTOWER_ROOT` (env), defaulting to the folder two levels above the app (`F:\Projects`). The app **never writes** into the workstation, with one exception: its application logs (ADR-005), written to `LOG_DIR`, by default `<WATCHTOWER_ROOT>/limforia/logs/watchtower/` (`bff/` and `client/`, one `YYYY-MM-DD.jsonl` per day). That folder is never read back, is not an archive wing, and is ignored by the watcher.
 
 | Source | What is read |
 |---|---|

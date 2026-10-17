@@ -54,6 +54,11 @@ const path = Astro.url.pathname;
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
     <title>{title === 'The Watchtower' ? title : `${title} · The Watchtower`}</title>
     <HeadScript />
+    <script>
+      // Client error reporting (ADR-005): readable reports to /api/client-errors.
+      import { installClientErrorReporter } from '../ui/client-errors';
+      installClientErrorReporter();
+    </script>
   </head>
   <body class="flex min-h-dvh flex-col bg-night text-ink">
     <a

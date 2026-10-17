@@ -6,6 +6,13 @@
  * tested without a real filesystem or timers.
  */
 import type { ActivityEvent, Snapshot } from '../../shared/types';
+import type { AppLogger } from '../logging/logger';
+
+const SILENT: Pick<AppLogger, 'info' | 'warn' | 'error'> = {
+  info: () => {},
+  warn: () => {},
+  error: () => {},
+};
 
 export interface Subscriber {
   onSnapshot(snapshot: Snapshot): void;
@@ -21,7 +28,8 @@ export interface ServiceDeps {
     onError: (error: Error) => void;
   }) => { close(): void };
   tail: { start(): Promise<void>; poll(): Promise<ActivityEvent[]> };
-  log?: Pick<Console, 'info' | 'warn' | 'error'>;
+  /** Where problems are reported (the system logger in production; silent by default). */
+  log?: Pick<AppLogger, 'info' | 'warn' | 'error'>;
   now?: () => number;
 }
 
@@ -38,11 +46,11 @@ export class SnapshotService {
   private watcher: { close(): void } | null = null;
   private expiryTimer: NodeJS.Timeout | null = null;
   private started = false;
-  private readonly log: Pick<Console, 'info' | 'warn' | 'error'>;
+  private readonly log: Pick<AppLogger, 'info' | 'warn' | 'error'>;
   private readonly now: () => number;
 
   constructor(private readonly deps: ServiceDeps) {
-    this.log = deps.log ?? console;
+    this.log = deps.log ?? SILENT;
     this.now = deps.now ?? Date.now;
   }
 
@@ -53,12 +61,12 @@ export class SnapshotService {
     try {
       await this.deps.tail.start();
     } catch (err) {
-      this.log.warn(`[watchtower] event log not readable: ${(err as Error).message}`);
+      this.log.warn('events.unreadable', 'Event log not readable', { err: (err as Error).message });
     }
     this.watcher = this.deps.watch({
       onChange: () => this.refresh(),
       onEventLog: () => void this.pollActivity(),
-      onError: (error) => this.log.error(`[watchtower] watcher error: ${error.message}`),
+      onError: (error) => this.log.error('watch.failed', 'Watcher error', { err: error.message }),
     });
   }
 
@@ -112,7 +120,7 @@ export class SnapshotService {
         for (const subscriber of this.subscribers) subscriber.onSnapshot(snapshot);
       })
       .catch((err: unknown) => {
-        this.log.error(`[watchtower] snapshot build failed: ${(err as Error).message}`);
+        this.log.error('snapshot.failed', 'Snapshot build failed', { err: (err as Error).message });
       });
   }
 
@@ -126,7 +134,7 @@ export class SnapshotService {
     try {
       events = await this.deps.tail.poll();
     } catch (err) {
-      this.log.warn(`[watchtower] event log read failed: ${(err as Error).message}`);
+      this.log.warn('events.read_failed', 'Event log read failed', { err: (err as Error).message });
       return;
     }
     for (const event of events) {

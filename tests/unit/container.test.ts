@@ -16,13 +16,15 @@ import {
   parseClientEntry,
   readServerEnv,
   ServerEnvError,
+  summariseServerEnv,
 } from '../../scripts/server-env.mjs';
 import {
-  createRequestPolicy,
-  loadServerSettings,
+  loadEnv,
+  type ServerEnv,
   type ServerSettings,
+  type TrustedClient,
 } from '../../src/server/config/env';
-import { guardRequest } from '../../src/server/security/request-guard';
+import { createRequestPolicy, guardRequest } from '../../src/server/security/request-guard';
 import { gitEnv } from '../../src/server/sources/git';
 import {
   diffTrees,
@@ -38,16 +40,24 @@ vi.mock('../../src/server/live/runtime', () => runtimeSpy);
 
 const START = fileURLToPath(new URL('../../scripts/start.mjs', import.meta.url));
 
-describe('server settings from the environment', () => {
-  it('defaults to the host behaviour', () => {
-    expect(readServerEnv({})).toEqual({
+describe('server settings from the environment (the one validator)', () => {
+  const ROOT_DEFAULT = join(APP_DIR, '..', '..');
+
+  it('defaults to the host behaviour, the real root and its log folder', () => {
+    const settings = readServerEnv({});
+    expect(settings).toEqual({
+      nodeEnv: 'development',
       container: false,
       host: '127.0.0.1',
       port: 4321,
+      root: ROOT_DEFAULT,
       trustedClients: [],
       allowedHosts: [],
       pollMs: null,
+      logLevel: 'info',
+      logDir: join(ROOT_DEFAULT, 'limforia', 'logs', 'watchtower'),
     });
+    expect(Object.isFrozen(settings)).toBe(true);
   });
 
   it('ignores HOST outside container mode, but honours PORT', () => {
@@ -63,72 +73,166 @@ describe('server settings from the environment', () => {
     expect(readServerEnv({ WATCHTOWER_CONTAINER: '0', HOST: '0.0.0.0' }).host).toBe('127.0.0.1');
   });
 
-  it('reads every container setting', () => {
-    expect(
-      readServerEnv({
-        WATCHTOWER_CONTAINER: '1',
-        WATCHTOWER_TRUSTED_CLIENTS: ' 172.17.0.1 , 192.168.65.0/24,fd00::/8 ',
-        WATCHTOWER_ALLOWED_HOSTS: 'localhost:8080,[::1]:8080',
-        WATCHTOWER_POLL_MS: '2000',
-      }),
-    ).toMatchObject({
-      trustedClients: [
-        { address: '172.17.0.1', prefix: null, family: 4 },
-        { address: '192.168.65.0', prefix: 24, family: 4 },
-        { address: 'fd00::', prefix: 8, family: 6 },
-      ],
-      allowedHosts: ['localhost:8080', '[::1]:8080'],
-      pollMs: 2000,
+  it('treats empty values as unset', () => {
+    expect(readServerEnv({ PORT: '', LOG_LEVEL: '  ', WATCHTOWER_POLL_MS: '' })).toMatchObject({
+      port: 4321,
+      logLevel: 'info',
+      pollMs: null,
     });
   });
 
+  it('reads every setting', () => {
+    const temp = makeTempDir('root-');
+    try {
+      expect(
+        readServerEnv({
+          NODE_ENV: 'production',
+          WATCHTOWER_CONTAINER: '1',
+          WATCHTOWER_ROOT: temp.dir,
+          WATCHTOWER_TRUSTED_CLIENTS: ' 172.17.0.1 , 192.168.65.0/24,fd00::/8 ',
+          WATCHTOWER_ALLOWED_HOSTS: 'localhost:8080,[::1]:8080',
+          WATCHTOWER_POLL_MS: '2000',
+          LOG_LEVEL: 'debug',
+          LOG_DIR: '/var/log/app',
+        }),
+      ).toMatchObject({
+        nodeEnv: 'production',
+        root: temp.dir,
+        trustedClients: [
+          { address: '172.17.0.1', prefix: null, family: 4 },
+          { address: '192.168.65.0', prefix: 24, family: 4 },
+          { address: 'fd00::', prefix: 8, family: 6 },
+        ],
+        allowedHosts: ['localhost:8080', '[::1]:8080'],
+        pollMs: 2000,
+        logLevel: 'debug',
+        logDir: '/var/log/app',
+      });
+      // LOG_DIR follows the root when not set.
+      expect(readServerEnv({ WATCHTOWER_ROOT: temp.dir }).logDir).toBe(
+        join(temp.dir, 'limforia', 'logs', 'watchtower'),
+      );
+    } finally {
+      temp.cleanup();
+    }
+  });
+
   it.each([
-    [{ WATCHTOWER_CONTAINER: 'yes' }, /WATCHTOWER_CONTAINER must be 1 or 0/],
-    [{ WATCHTOWER_CONTAINER: '1', HOST: 'my-host' }, /HOST must be an IP/],
-    [{ PORT: '0' }, /PORT must be an integer from 1 to 65535/],
-    [{ PORT: '65536' }, /PORT/],
-    [{ PORT: '80.5' }, /PORT/],
-    [{ WATCHTOWER_TRUSTED_CLIENTS: '172.17.0.1' }, /needs WATCHTOWER_CONTAINER=1/],
-    [{ WATCHTOWER_CONTAINER: '1', WATCHTOWER_TRUSTED_CLIENTS: '172.17.0' }, /not an IP or CIDR/],
-    [{ WATCHTOWER_CONTAINER: '1', WATCHTOWER_TRUSTED_CLIENTS: 'docker.host' }, /not an IP or CIDR/],
-    [{ WATCHTOWER_CONTAINER: '1', WATCHTOWER_TRUSTED_CLIENTS: '10.0.0.0/33' }, /bad prefix/],
+    [{ NODE_ENV: 'staging' }, 'NODE_ENV', /must be one of development, test, production/],
+    [{ WATCHTOWER_CONTAINER: 'yes' }, 'WATCHTOWER_CONTAINER', /must be 1 or 0/],
+    [{ WATCHTOWER_CONTAINER: '1', HOST: 'my-host' }, 'HOST', /must be an IP address/],
+    [{ PORT: '0' }, 'PORT', /must be an integer from 1 to 65535/],
+    [{ PORT: '65536' }, 'PORT', /from 1 to 65535/],
+    [{ PORT: '80.5' }, 'PORT', /integer/],
+    [{ WATCHTOWER_ROOT: 'F:/no/such/folder' }, 'WATCHTOWER_ROOT', /not an existing directory/],
     [
-      { WATCHTOWER_CONTAINER: '1', WATCHTOWER_TRUSTED_CLIENTS: '10.0.0.0/8/1' },
+      { WATCHTOWER_TRUSTED_CLIENTS: '172.17.0.1' },
+      'WATCHTOWER_TRUSTED_CLIENTS',
+      /needs WATCHTOWER_CONTAINER=1/,
+    ],
+    [
+      { WATCHTOWER_CONTAINER: '1', WATCHTOWER_TRUSTED_CLIENTS: '172.17.0' },
+      'WATCHTOWER_TRUSTED_CLIENTS',
+      /entry 1 is not an IP or CIDR/,
+    ],
+    [
+      { WATCHTOWER_CONTAINER: '1', WATCHTOWER_TRUSTED_CLIENTS: '10.0.0.1,docker.host' },
+      'WATCHTOWER_TRUSTED_CLIENTS',
+      /entry 2 is not an IP or CIDR/,
+    ],
+    [
+      { WATCHTOWER_CONTAINER: '1', WATCHTOWER_TRUSTED_CLIENTS: '10.0.0.0/33' },
+      'WATCHTOWER_TRUSTED_CLIENTS',
       /not an IP or CIDR/,
     ],
     [
       { WATCHTOWER_CONTAINER: '1', WATCHTOWER_TRUSTED_CLIENTS: 'fe80::1%eth0' },
+      'WATCHTOWER_TRUSTED_CLIENTS',
       /not an IP or CIDR/,
     ],
-    [{ WATCHTOWER_ALLOWED_HOSTS: 'localhost' }, /not a host:port/],
-    [{ WATCHTOWER_ALLOWED_HOSTS: 'evil.test:99999' }, /not a host:port/],
-    [{ WATCHTOWER_ALLOWED_HOSTS: 'a b:80' }, /not a host:port/],
-    [{ WATCHTOWER_POLL_MS: '10' }, /250 to 60000/],
-    [{ WATCHTOWER_POLL_MS: 'fast' }, /WATCHTOWER_POLL_MS/],
-  ])('rejects %o', (env, message) => {
-    expect(() => readServerEnv(env)).toThrow(ServerEnvError);
-    expect(() => readServerEnv(env)).toThrow(message);
+    [{ WATCHTOWER_ALLOWED_HOSTS: 'localhost' }, 'WATCHTOWER_ALLOWED_HOSTS', /not a host:port/],
+    [
+      { WATCHTOWER_ALLOWED_HOSTS: 'evil.test:99999' },
+      'WATCHTOWER_ALLOWED_HOSTS',
+      /not a host:port/,
+    ],
+    [{ WATCHTOWER_POLL_MS: '10' }, 'WATCHTOWER_POLL_MS', /250 to 60000/],
+    [{ LOG_LEVEL: 'loud' }, 'LOG_LEVEL', /must be one of fatal/],
+  ])('fails fast on %o, naming the variable', (env, variable, message) => {
+    let error: unknown;
+    try {
+      readServerEnv(env);
+    } catch (err) {
+      error = err;
+    }
+    expect(error).toBeInstanceOf(ServerEnvError);
+    expect((error as ServerEnvError).variables).toContain(variable);
+    expect((error as Error).message).toMatch(message);
+    expect((error as Error).message).toContain(variable);
+  });
+
+  it('never echoes a value in its error, even a secret-looking one', () => {
+    const planted = {
+      NODE_ENV: 'SECRET-NODE-ENV',
+      WATCHTOWER_CONTAINER: 'SECRET-FLAG',
+      PORT: 'SECRET-PORT',
+      WATCHTOWER_ROOT: 'SECRET-ROOT-PATH',
+      WATCHTOWER_ALLOWED_HOSTS: 'SECRET-HOST',
+      WATCHTOWER_POLL_MS: 'SECRET-POLL',
+      LOG_LEVEL: 'SECRET-LEVEL',
+    };
+    for (const [name, value] of Object.entries(planted)) {
+      const result = loadEnv({ [name]: value });
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.variables).toEqual([name]);
+        expect(result.error).not.toContain('SECRET');
+      }
+    }
+    // Every problem at once, still by name only.
+    const all = loadEnv(planted);
+    expect(all.ok).toBe(false);
+    if (!all.ok) expect(all.error).not.toContain('SECRET');
   });
 
   it('parses single entries', () => {
     expect(parseClientEntry('::1')).toEqual({ address: '::1', prefix: null, family: 6 });
+    expect(parseClientEntry('no')).toBeNull();
     expect(parseAllowedHost('LocalHost:4321')).toBe('localhost:4321');
+    expect(parseAllowedHost('nope')).toBeNull();
   });
 
-  it('reports a bad environment as data for the middleware', () => {
-    expect(loadServerSettings({ PORT: 'x' })).toEqual({
+  it('reports a bad environment as data for the middleware (fail closed)', () => {
+    expect(loadEnv({ PORT: 'x' })).toEqual({
       ok: false,
-      error: 'PORT must be an integer from 1 to 65535, not "x"',
+      error: 'Invalid environment: PORT must be an integer from 1 to 65535',
+      variables: ['PORT'],
+    });
+    expect(loadEnv({}).ok).toBe(true);
+  });
+
+  it('summarises the config for the startup log without values that could be secret', () => {
+    const summary = summariseServerEnv(
+      readServerEnv({ WATCHTOWER_CONTAINER: '1', WATCHTOWER_TRUSTED_CLIENTS: '172.17.0.1' }),
+    );
+    expect(summary).toEqual({
+      nodeEnv: 'development',
+      container: true,
+      host: '0.0.0.0',
+      port: 4321,
+      trustedClients: 1,
+      extraAllowedHosts: 0,
+      watch: 'fs.watch',
+      logLevel: 'info',
     });
   });
 });
 
+const entry = (text: string): TrustedClient => parseClientEntry(text) as TrustedClient;
+
 describe('trusted clients', () => {
   it('matches addresses and subnets, including IPv4-mapped peers', () => {
-    const match = createClientMatcher([
-      parseClientEntry('172.17.0.1'),
-      parseClientEntry('192.168.65.0/24'),
-    ]);
+    const match = createClientMatcher([entry('172.17.0.1'), entry('192.168.65.0/24')]);
     expect(match('172.17.0.1')).toBe(true);
     expect(match('::ffff:172.17.0.1')).toBe(true);
     expect(match('192.168.65.254')).toBe(true);
@@ -141,7 +245,7 @@ describe('trusted clients', () => {
 
 describe('request policy', () => {
   const settings = (over: Partial<ServerSettings> = {}): ServerSettings => ({
-    ...(readServerEnv({}) as ServerSettings),
+    ...(readServerEnv({}) as ServerEnv),
     ...over,
   });
   const req = (address: string, host = '127.0.0.1:4321') => ({ host, address, aborted: false });
@@ -158,7 +262,7 @@ describe('request policy', () => {
 
   it('admits the Docker gateway in container mode only when it is listed', () => {
     const env = { WATCHTOWER_CONTAINER: '1', WATCHTOWER_TRUSTED_CLIENTS: '172.17.0.1' };
-    const policy = createRequestPolicy(readServerEnv(env) as ServerSettings);
+    const policy = createRequestPolicy(readServerEnv(env) as ServerEnv);
     expect(guardRequest(req('172.17.0.1'), policy)).toEqual({ allow: true });
     expect(guardRequest(req('172.17.0.9'), policy)).toMatchObject({
       allow: false,
@@ -174,9 +278,7 @@ describe('request policy', () => {
   });
 
   it('never trusts listed clients outside container mode', () => {
-    const policy = createRequestPolicy(
-      settings({ trustedClients: [parseClientEntry('172.17.0.1')] }),
-    );
+    const policy = createRequestPolicy(settings({ trustedClients: [entry('172.17.0.1')] }));
     expect(guardRequest(req('172.17.0.1'), policy)).toMatchObject({ allow: false });
   });
 
@@ -196,8 +298,8 @@ describe('start script', () => {
       timeout: 10_000,
     });
     expect(result.status).toBe(1);
-    expect(result.stderr).toMatch(/refusing to start: WATCHTOWER_TRUSTED_CLIENTS needs/);
-    expect(result.stdout).not.toMatch(/starting on/);
+    expect(result.stderr).toMatch(/refusing to start: .*WATCHTOWER_TRUSTED_CLIENTS needs/);
+    expect(result.stdout).not.toMatch(/server.started/);
   });
 });
 

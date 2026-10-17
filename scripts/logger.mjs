@@ -79,7 +79,10 @@ function tee(sinks) {
 
 /** Wraps pino so every call names its event: `log.info('request.completed', 'Request completed', {...})`. */
 function wrap(base) {
-  const at = (level) => (event, msg, fields = {}) => base[level]({ ...fields, event }, msg);
+  const at =
+    (level) =>
+    (event, msg, fields = {}) =>
+      base[level]({ ...fields, event }, msg);
   return {
     fatal: at('fatal'),
     error: at('error'),
@@ -116,13 +119,21 @@ export function createLogger({ service, env, level, logDir = null, sinks }) {
     tee(outputs),
   );
   // The root is never used directly: system lines carry requestId null.
-  return { system: wrap(base.child({ requestId: null })), forRequest: (requestId) => wrap(base.child({ requestId })) };
+  return {
+    system: wrap(base.child({ requestId: null })),
+    forRequest: (requestId) => wrap(base.child({ requestId })),
+  };
 }
 
 /** Request ids we accept from a client: 8-64 of [A-Za-z0-9_-]. Anything else is replaced. */
 export const REQUEST_ID = /^[A-Za-z0-9_-]{8,64}$/;
 
 /** The client's id when it is well formed, otherwise a new random UUID. */
+/**
+ * @param {unknown} incoming
+ * @param {() => string} [generate]
+ * @returns {string}
+ */
 export function resolveRequestId(incoming, generate = () => crypto.randomUUID()) {
   return typeof incoming === 'string' && REQUEST_ID.test(incoming) ? incoming : generate();
 }

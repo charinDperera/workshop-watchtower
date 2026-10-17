@@ -4,6 +4,7 @@
  * a `: ping` comment every 15 s, and full cleanup when the client goes away.
  */
 import type { ActivityEvent, Snapshot } from '../../shared/types';
+import { systemLog } from '../logging/logger';
 import { SSE_PING_MS } from '../constants';
 import type { Subscriber } from './snapshot-service';
 
@@ -75,7 +76,9 @@ export function createEventStream(
         source.markSent(snapshot);
         send(formatSseEvent('snapshot', snapshot));
       } catch (err) {
-        console.error(`[watchtower] snapshot for stream failed: ${(err as Error).message}`);
+        systemLog().error('stream.snapshot_failed', 'Snapshot for a new stream failed', {
+          err: (err as Error).message,
+        });
         send(formatSseEvent('error', { error: 'Snapshot unavailable', status: 500 }));
       }
     },

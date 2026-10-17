@@ -15,7 +15,7 @@ export type RouteHandler = (context: APIContext, log: AppLogger) => unknown;
 
 /** The request's logger (set by the middleware), or a fresh one outside a request. */
 export function logOf(context: Pick<APIContext, 'locals'>): AppLogger {
-  return context.locals.log ?? requestLog(context.locals.requestId ?? 'none');
+  return context.locals?.log ?? requestLog(context.locals?.requestId ?? 'none');
 }
 
 export function toErrorResponse(err: unknown, log: AppLogger, route: string): Response {
@@ -23,7 +23,11 @@ export function toErrorResponse(err: unknown, log: AppLogger, route: string): Re
     if (err.status < 500) {
       log.warn('request.rejected', err.message, { route, status: err.status });
     } else {
-      log.error('request.failed', err.message, { route, status: err.status, err: err.cause ?? err });
+      log.error('request.failed', err.message, {
+        route,
+        status: err.status,
+        err: err.cause ?? err,
+      });
     }
     const response = errorResponse(err.status, err.message);
     for (const [name, value] of Object.entries(err.headers)) response.headers.set(name, value);

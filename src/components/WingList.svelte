@@ -6,7 +6,6 @@
 <script lang="ts">
   import type { WingId, WingSummary } from '../shared/types';
   import { plural } from '../ui/format';
-  import { WING_LABELS } from '../ui/labels';
   import EmptyState from './EmptyState.svelte';
   import ErrorState from './ErrorState.svelte';
   import LoadingState from './LoadingState.svelte';
@@ -31,7 +30,6 @@
 {:else}
   <ul class="grid grid-cols-1 gap-2 xs:grid-cols-2">
     {#each wings as wing (wing.id)}
-      {@const label = WING_LABELS[wing.id]}
       {@const subs = Object.entries(wing.subWings)}
       {@const chosen = current === wing.id}
       <li
@@ -44,10 +42,10 @@
             <a
               href="/limforia?wing={encodeURIComponent(wing.id)}"
               aria-current={chosen ? 'page' : undefined}
-              class="stretched-link link-standalone text-ink">{label.title}</a
+              class="stretched-link link-standalone text-ink">{wing.title}</a
             >
           </p>
-          <p class="text-xs text-ink-faint">{label.holds}</p>
+          <p class="text-xs text-ink-faint">{wing.description}</p>
           {#if subs.length > 0}
             <p class="mt-1 text-xs text-ink-muted">
               {subs.map(([name, n]) => `${name} ${n}`).join(' · ')}

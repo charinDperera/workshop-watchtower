@@ -4,6 +4,7 @@ import { mkdirSync, symlinkSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { createRequestListener } from '../../scripts/http-server.mjs';
+import { createLogger } from '../../scripts/logger.mjs';
 import { createStaticHandler, staticPathFor } from '../../scripts/static-files.mjs';
 import {
   cspHash,
@@ -88,6 +89,10 @@ describe('Node request listener (start.mjs)', () => {
   let port = 0;
   let client: { dir: string; cleanup: () => void };
   const appCalls: string[] = [];
+  const appLocals: unknown[] = [];
+  const logged: string[] = [];
+  const lines = { write: (line: string) => logged.push(line) };
+  const entries = () => logged.map((l) => JSON.parse(l) as Record<string, unknown>);
 
   beforeAll(async () => {
     client = makeTempDir('client-');
@@ -103,15 +108,16 @@ describe('Node request listener (start.mjs)', () => {
     const listener = createRequestListener({
       policy: DEFAULT_POLICY,
       serveStatic: createStaticHandler(client.dir),
-      app: (req, res) => {
+      app: (req, res, _next, locals) => {
         appCalls.push(req.url ?? '');
+        appLocals.push(locals);
         res.writeHead(200, {
           'Content-Type': 'text/html',
           'Content-Security-Policy': "script-src 'self' 'sha256-page'",
         });
         res.end('<p>page</p>');
       },
-      log: { warn: () => {}, error: () => {} },
+      logger: createLogger({ service: 'bff', env: 'test', level: 'info', sinks: [lines] }),
     });
     server = createServer(listener);
     await new Promise<void>((done) => server.listen(0, '127.0.0.1', done));
@@ -123,14 +129,22 @@ describe('Node request listener (start.mjs)', () => {
     client.cleanup();
   });
 
-  const get = (path: string, host = '127.0.0.1:4321', method = 'GET') =>
+  const get = (
+    path: string,
+    host = '127.0.0.1:4321',
+    method = 'GET',
+    extra: Record<string, string> = {},
+  ) =>
     new Promise<{ status: number; headers: Record<string, unknown>; body: string }>(
       (done, fail) => {
-        const req = request({ host: '127.0.0.1', port, path, method, headers: { host } }, (res) => {
-          let body = '';
-          res.on('data', (c) => (body += c));
-          res.on('end', () => done({ status: res.statusCode ?? 0, headers: res.headers, body }));
-        });
+        const req = request(
+          { host: '127.0.0.1', port, path, method, headers: { host, ...extra } },
+          (res) => {
+            let body = '';
+            res.on('data', (c) => (body += c));
+            res.on('end', () => done({ status: res.statusCode ?? 0, headers: res.headers, body }));
+          },
+        );
         req.on('error', fail);
         req.end();
       },
@@ -179,6 +193,62 @@ describe('Node request listener (start.mjs)', () => {
     const bad = await get('/%E0%A4%A');
     expect(bad.status).toBe(400);
     expectHeaders(bad.headers);
+  });
+
+  it('returns a request id: keeps a well-formed one, replaces anything else', async () => {
+    const fresh = await get('/favicon.svg');
+    expect(fresh.headers['x-request-id']).toMatch(/^[0-9a-f-]{36}$/);
+    const kept = await get('/favicon.svg', undefined, 'GET', { 'x-request-id': 'client-id_0001' });
+    expect(kept.headers['x-request-id']).toBe('client-id_0001');
+    for (const bad of ['short', 'has space here', 'x'.repeat(65), 'semi;colon-12345']) {
+      const replaced = await get('/favicon.svg', undefined, 'GET', { 'x-request-id': bad });
+      expect(replaced.headers['x-request-id']).not.toBe(bad);
+      expect(replaced.headers['x-request-id']).toMatch(/^[0-9a-f-]{36}$/);
+    }
+    // Refusals carry one too.
+    expect((await get('/', 'evil.test:4321')).headers['x-request-id']).toMatch(/^[0-9a-f-]{36}$/);
+  });
+
+  it('hands Astro the id and tells it the edge already logs the request', async () => {
+    appLocals.length = 0;
+    const page = await get('/host', undefined, 'GET', { 'x-request-id': 'edge-test-0001' });
+    expect(page.headers['x-request-id']).toBe('edge-test-0001');
+    expect(appLocals).toEqual([{ requestId: 'edge-test-0001', edgeLogged: true }]);
+  });
+
+  it('logs each request once, with the required fields and no query string', async () => {
+    logged.length = 0;
+    await get('/host?agent=paul&token=abc', undefined, 'GET', { 'x-request-id': 'log-test-00001' });
+    await new Promise((r) => setTimeout(r, 20));
+    const lines = entries().filter((e) => e.requestId === 'log-test-00001');
+    expect(lines).toHaveLength(1);
+    expect(lines[0]).toMatchObject({
+      level: 'info',
+      app: 'watchtower',
+      service: 'bff',
+      env: 'test',
+      requestId: 'log-test-00001',
+      event: 'request.completed',
+      msg: 'Request completed',
+      method: 'GET',
+      route: '/host',
+      status: 200,
+    });
+    expect(typeof lines[0]?.durationMs).toBe('number');
+    expect(typeof lines[0]?.time).toBe('string');
+    expect(JSON.stringify(lines)).not.toContain('token');
+  });
+
+  it('logs a refusal as a warning, without the peer address', async () => {
+    logged.length = 0;
+    await get('/favicon.svg', 'evil.test:4321', 'GET', { 'x-request-id': 'refused-0000001' });
+    await new Promise((r) => setTimeout(r, 20));
+    const lines = entries().filter((e) => e.requestId === 'refused-0000001');
+    expect(lines.map((e) => [e.level, e.event, e.status])).toEqual([
+      ['warn', 'request.refused', 403],
+      ['info', 'request.completed', 403],
+    ]);
+    expect(JSON.stringify(lines)).not.toContain('127.0.0.1');
   });
 });
 

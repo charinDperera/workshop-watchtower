@@ -1,6 +1,9 @@
 import { posix } from 'node:path';
 import type { ArchiveRecord, RecordHeader, WingId } from '../../../shared/types';
-import { LIMFORIA_WINGS, RECORD_STATUSES, RECORD_TYPES } from '../../constants';
+import { PATHS, RECORD_STATUSES, RECORD_TYPES } from '../../constants';
+
+/** The wing of a record directly in `limforia/`, outside any wing folder. */
+export const OTHER_WING = 'other';
 import { splitFrontmatter, toOptionalString, toStringList } from './frontmatter';
 
 const HEADER_KEYS = ['type', 'date', 'agents', 'tags', 'status'] as const;
@@ -28,15 +31,13 @@ export function firstHeading(body: string): string | null {
 /** Wing and sub-wing of a workstation-relative path. */
 export function classifyPath(path: string): { wing: WingId; subWing: string | null } {
   const [top, second, third] = path.split('/');
-  if (top === 'intel') return { wing: 'intel', subWing: null };
-  if (top === 'limforia' && second && third !== undefined) {
-    const wing = (LIMFORIA_WINGS as readonly string[]).includes(second)
-      ? (second as WingId)
-      : 'other';
-    const isNested = wing === 'scriptorium' && path.split('/').length > 3;
-    return { wing, subWing: isNested ? (third ?? null) : null };
+  if (top === PATHS.intel) return { wing: PATHS.intel, subWing: null };
+  if (top === PATHS.limforia && second && third !== undefined) {
+    // Any subfolder of limforia/ is a wing; a folder inside it is a sub-wing.
+    const isNested = path.split('/').length > 3;
+    return { wing: second, subWing: isNested ? third : null };
   }
-  return { wing: 'other', subWing: null };
+  return { wing: OTHER_WING, subWing: null };
 }
 
 /** Validates a parsed header mapping against the Constitution's record header. */

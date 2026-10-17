@@ -8,7 +8,8 @@ import { ACTIVITY_LIMIT, AGENT_RECENT_EVENTS, PATHS } from '../constants';
 import { deriveLiveStates } from './activity';
 import { newestFirst, recentEventsByAgent } from './activity-history';
 import { derivePipeline, findMainSlug, joinAgents, nextExpiry } from './agents';
-import { countWings, crossCheckCatalog, indexAuditLogs } from './archive';
+import { countWings, crossCheckCatalog, discoverWings, indexAuditLogs } from './archive';
+import { parseFolderDescriptions } from '../sources/parse/folder-descriptions';
 import { runComplianceChecks } from './compliance';
 import { readEventLog } from '../sources/event-log';
 import { readAppRepo, readRepoState, type GitRunner } from '../sources/git';
@@ -40,7 +41,9 @@ interface LoadedRecord {
 
 async function readRecords(fs: WorkstationFs): Promise<LoadedRecord[]> {
   const files = [
-    ...(await fs.listMarkdown(PATHS.limforia)).filter((f) => f !== PATHS.catalog),
+    ...(await fs.listMarkdown(PATHS.limforia)).filter(
+      (f) => f !== PATHS.catalog && !f.startsWith(`${PATHS.logs}/`),
+    ),
     ...(await fs.listMarkdown(PATHS.intel)),
   ];
   return Promise.all(
@@ -58,13 +61,24 @@ export async function buildSnapshot(deps: SnapshotDeps): Promise<Snapshot> {
   // The roster comes first: it names the main agent, whom main-agent events belong to.
   const roster = parseRoster(await fs.readText(PATHS.roster));
   const mainSlug = findMainSlug(roster.items);
-  const [soulText, catalogText, eventLog, definitions, loaded, appNames] = await Promise.all([
+  const [
+    soulText,
+    catalogText,
+    eventLog,
+    definitions,
+    loaded,
+    appNames,
+    lawsText,
+    limforiaFolders,
+  ] = await Promise.all([
     fs.readText(PATHS.soulBinder),
     fs.readText(PATHS.catalog),
     readEventLog(fs, mainSlug),
     readDefinitions(fs),
     readRecords(fs),
     fs.listDirs(PATHS.apps),
+    fs.readText(PATHS.constitution),
+    fs.listDirs(PATHS.limforia),
   ]);
 
   const soulBinder = parseSoulBinder(soulText);
@@ -139,7 +153,7 @@ export async function buildSnapshot(deps: SnapshotDeps): Promise<Snapshot> {
     agents,
     retired: soulBinder.items,
     records,
-    wings: countWings(records),
+    wings: countWings(records, discoverWings(limforiaFolders, parseFolderDescriptions(lawsText))),
     catalog: { entries: crossed.entries, found: catalog.found },
     compliance,
     pipeline: derivePipeline(agents),

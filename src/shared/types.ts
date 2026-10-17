@@ -248,15 +248,12 @@ export type RecordType =
 export type RecordStatus = 'open' | 'closed' | 'accepted' | 'superseded';
 
 /** Top-level areas a record can live in. Scriptorium records also carry a `subWing`. */
-export type WingId =
-  | 'chronicles'
-  | 'audit-hall'
-  | 'reliquary'
-  | 'vault-of-ideas'
-  | 'scriptorium'
-  | 'templates'
-  | 'intel'
-  | 'other';
+/**
+ * A wing: the name of a `limforia/` subfolder (discovered, so a new wing needs no app
+ * change; `logs/` is not a wing), `intel` for Uriel's reports, or `other` for a record
+ * directly in `limforia/`.
+ */
+export type WingId = string;
 
 /** The YAML header of a record. Fields are `null` or empty when missing or invalid. */
 export interface RecordHeader {
@@ -273,7 +270,7 @@ export interface RecordHeader {
 export interface ArchiveRecord {
   path: string;
   wing: WingId;
-  /** Second path segment inside the Scriptorium: `features`, `decisions`, `caveats`, `issues`. */
+  /** The subfolder inside the wing, e.g. `decisions` in `scriptorium/decisions/`. */
   subWing: string | null;
   /** Text of the first `# ` heading, or the file name when there is none. */
   title: string;
@@ -290,9 +287,16 @@ export interface ArchiveRecord {
 
 export interface WingSummary {
   id: WingId;
+  /** Display name from the folder, e.g. `Vault of Ideas` (see `wingTitle`). */
+  title: string;
+  /**
+   * What the wing holds, from the folder tables in CLAUDE.md (the Limforia wing table, or
+   * the Realms table for `intel`); the folder name when it is not described there.
+   */
+  description: string;
   /** Number of records (templates count only in the `templates` wing). */
   count: number;
-  /** Per sub-wing counts (Scriptorium only), e.g. `{ decisions: 1 }`. */
+  /** Per sub-wing counts, e.g. `{ decisions: 1 }`. */
   subWings: Record<string, number>;
 }
 

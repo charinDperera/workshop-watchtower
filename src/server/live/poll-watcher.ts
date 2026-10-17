@@ -20,7 +20,10 @@ function isMissing(err: unknown): boolean {
 }
 
 /** One stat-scan of the tree below `root`. Files that vanish mid-scan are skipped. */
-export async function scanTree(root: string): Promise<TreeState> {
+export async function scanTree(
+  root: string,
+  isIgnored: (relPath: string) => boolean = (relPath) => isIgnoredChange(relPath),
+): Promise<TreeState> {
   const state: TreeState = new Map();
   const walk = async (rel: string): Promise<void> => {
     let entries: Dirent[];
@@ -32,7 +35,7 @@ export async function scanTree(root: string): Promise<TreeState> {
     }
     for (const entry of entries) {
       const child = rel === '' ? entry.name : `${rel}/${entry.name}`;
-      if (isIgnoredChange(child)) continue;
+      if (isIgnored(child)) continue;
       if (entry.isDirectory()) {
         await walk(child);
       } else if (entry.isFile()) {

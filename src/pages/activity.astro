@@ -11,12 +11,7 @@ import PageHeader from '../components/PageHeader.astro';
 import Panel from '../components/Panel.astro';
 import LiveTimeline from '../components/live/LiveTimeline.svelte';
 import Shell from '../layouts/Shell.astro';
-import { pageActivity } from '../server/services/activity-history';
-import { parseActivityQuery } from '../server/schemas/activity-query';
-import { readEventLog } from '../server/sources/event-log';
-import { createWorkstationFs } from '../server/sources/workstation-fs';
-import { getRuntime } from '../server/live/runtime';
-import { HOOK_EVENTS, type ActivityPage } from '../shared/types';
+import { HOOK_EVENTS } from '../shared/types';
 import { activityQuery, EVENT_LABELS, PAGE_SIZE, parseActivityFilter } from '../ui/activity-page';
 import {
   agentRefs,
@@ -26,7 +21,7 @@ import {
   UNATTRIBUTED_LABEL,
 } from '../ui/format';
 import { nameWithTitle } from '../ui/agent-title';
-import { loadSnapshot } from '../server/handlers/page-snapshot';
+import { loadActivityPage, loadSnapshot } from '../server/handlers/page-snapshot';
 
 const { snapshot, error } = await loadSnapshot();
 const now = Date.now();
@@ -35,22 +30,9 @@ const retryHref = Astro.url.pathname;
 const { filter, ignored } = parseActivityFilter(Astro.url.searchParams);
 const filtered = filter.agent !== null || filter.event !== null;
 
-let page: ActivityPage | null = null;
-let pageError: string | null = null;
-const query = parseActivityQuery(
+const { page, error: pageError } = await loadActivityPage(
   new URLSearchParams(activityQuery({ ...filter, limit: PAGE_SIZE }).slice(1)),
 );
-if (!query.ok) {
-  pageError = query.error;
-} else {
-  try {
-    const log = await readEventLog(createWorkstationFs(getRuntime().root));
-    page = pageActivity(log.events, query.query);
-  } catch (err) {
-    console.error(`[watchtower] /activity log failed: ${(err as Error).message}`);
-    pageError = 'The activity log could not be read.';
-  }
-}
 if (!page) Astro.response.status = 503;
 
 const refs = snapshot ? agentRefs(snapshot.agents) : null;

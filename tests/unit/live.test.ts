@@ -7,7 +7,7 @@ import { isEventLogChange, isIgnoredChange } from '../../src/server/live/watch-f
 import { debounce, watchWorkstation } from '../../src/server/live/watcher';
 import { SnapshotService, type ServiceDeps } from '../../src/server/live/snapshot-service';
 import { createEventStream, formatSseEvent, SSE_PING } from '../../src/server/live/sse';
-import { resolveRoot } from '../../src/server/config/root';
+import { defaultRoot, readServerEnv } from '../../scripts/server-env.mjs';
 import { APP_DIR, FIXTURE, makeTempDir } from './helpers';
 
 const line = (event: string, ts = '2026-10-16T12:00:00.000Z') =>
@@ -292,17 +292,18 @@ describe('SSE stream', () => {
 
 describe('root resolution', () => {
   it('uses WATCHTOWER_ROOT when set', () => {
-    expect(resolveRoot({ WATCHTOWER_ROOT: FIXTURE })).toBe(FIXTURE);
+    expect(readServerEnv({ WATCHTOWER_ROOT: FIXTURE }).root).toBe(FIXTURE);
   });
 
-  it('defaults to two levels above the app', () => {
-    const root = resolveRoot({}, new URL('../../src/lib/config.ts', import.meta.url).href);
-    expect(root).toBe(join(APP_DIR, '..', '..'));
+  it('defaults to two levels above the app, from the bundled module too', () => {
+    expect(readServerEnv({}).root).toBe(join(APP_DIR, '..', '..'));
+    const fromDist = new URL('../../dist/server/chunks/x.mjs', import.meta.url).href;
+    expect(defaultRoot(fromDist)).toBe(join(APP_DIR, '..', '..'));
   });
 
-  it('rejects a root that is not a directory', () => {
-    expect(() => resolveRoot({ WATCHTOWER_ROOT: join(FIXTURE, 'ROSTER.md') })).toThrow(
-      /not a directory/,
+  it('rejects a root that is not a directory, by name only', () => {
+    expect(() => readServerEnv({ WATCHTOWER_ROOT: join(FIXTURE, 'ROSTER.md') })).toThrow(
+      'WATCHTOWER_ROOT is not an existing directory',
     );
   });
 });
