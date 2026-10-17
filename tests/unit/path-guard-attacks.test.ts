@@ -1,5 +1,5 @@
 /**
- * Peter's attack suite for the record path guard (src/lib/security/record-path.ts) and the
+ * Peter's attack suite for the record path guard (src/server/security/record-path.ts) and the
  * record service that sits behind GET /api/record and /limforia?record=.
  */
 import { linkSync, mkdirSync, statSync, symlinkSync, writeFileSync } from 'node:fs';

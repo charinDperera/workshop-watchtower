@@ -32,8 +32,14 @@ How the container is set up (`Dockerfile`, `compose.yaml`):
 - The workstation (`../..`) is mounted read-only at `/workstation`, and polled every
   2 s (`WATCHTOWER_POLL_MS`), because file events from a Windows host do not reach the
   container through the bind mount.
+- Logs: `../../limforia/logs/watchtower` is bind-mounted read-write at `/var/log/app`
+  (`LOG_DIR`), so log files land in `limforia/logs/watchtower/bff/` and `client/` on the
+  host. It is a separate mount, not nested under `/workstation`. Compose creates the
+  host folder if it is missing. The same files are also visible read-only under
+  `/workstation/limforia/logs/`, which the watcher always ignores.
 - The port is published on `127.0.0.1` only. The container runs as the `node` user,
-  with a read-only root filesystem, a `tmpfs` at `/tmp`, all capabilities dropped and
+  with a read-only root filesystem (the log mount and a `tmpfs` at `/tmp` are the only
+  writable paths), all capabilities dropped and
   `no-new-privileges`.
 - The server admits loopback peers and the one address in `WATCHTOWER_TRUSTED_CLIENTS`.
   On Docker Desktop for Windows, traffic to the published port reaches the server from

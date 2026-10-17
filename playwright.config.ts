@@ -1,13 +1,18 @@
 import { defineConfig, devices } from '@playwright/test';
-import { prepareWorkstation } from './tests/e2e/support/workstation';
+import { E2E_HOST, E2E_LOG_DIR, E2E_PORT, prepareWorkstation } from './tests/e2e/support/workstation';
 
-// End-to-end tests are Peter's. The server must run on 127.0.0.1:4321 because the Host-header
-// guard only admits that origin, so only one e2e server can run at a time.
+// End-to-end tests are Peter's.
+//
+// The e2e server runs on 127.0.0.1:4399, never 4321: the User may run the app there and
+// Raphael the container. The Host guard admits 4399 through WATCHTOWER_ALLOWED_HOSTS.
+// `reuseExistingServer: false` makes Playwright fail rather than test whatever already
+// listens on the port.
 //
 // The server never reads the fixture in place: it runs on a disposable copy under
 // `.local/peter/e2e/ws`, made fresh for every run (tests/e2e/support/workstation.ts), so the
 // live specs can write into it. WATCHTOWER_E2E_ROOT overrides the copy (for example a copy you
-// made yourself); specs that write refuse any root without the disposable marker.
+// made yourself); specs that write refuse any root without the disposable marker. Its logs go
+// to `.local/peter/e2e/logs`, never to the real limforia/logs.
 //
 // The config is evaluated again in every worker. The runner sets WATCHTOWER_E2E_ROOT before
 // the workers start, so they inherit it and never re-copy the workstation mid-run.
@@ -26,8 +31,8 @@ export default defineConfig({
   retries: process.env.CI ? 1 : 0,
   reporter: [['list'], ['html', { open: 'never' }]],
   use: {
-    baseURL: 'http://127.0.0.1:4321',
-    trace: 'on-first-retry',
+    baseURL: `http://${E2E_HOST}`,
+    trace: 'retain-on-failure',
   },
   projects: [
     { name: 'chromium', use: { ...devices['Desktop Chrome'] } },
@@ -36,11 +41,21 @@ export default defineConfig({
   ],
   webServer: {
     command: 'pnpm build && pnpm start',
-    url: 'http://127.0.0.1:4321/api/snapshot',
-    // Never reuse a server already on 4321 (for example a dev server on the real workstation):
-    // Playwright fails instead, so e2e can only ever run against the disposable copy.
+    url: `http://${E2E_HOST}/api/health`,
     reuseExistingServer: false,
-    timeout: 180_000,
-    env: { WATCHTOWER_ROOT: root },
+    timeout: 240_000,
+    // Every variable the server reads is set here, so nothing from the shell leaks in.
+    env: {
+      NODE_ENV: 'production',
+      PORT: String(E2E_PORT),
+      HOST: '',
+      WATCHTOWER_ROOT: root,
+      WATCHTOWER_CONTAINER: '0',
+      WATCHTOWER_TRUSTED_CLIENTS: '',
+      WATCHTOWER_ALLOWED_HOSTS: `127.0.0.1:${E2E_PORT},localhost:${E2E_PORT}`,
+      WATCHTOWER_POLL_MS: '',
+      LOG_LEVEL: 'info',
+      LOG_DIR: E2E_LOG_DIR,
+    },
   },
 });

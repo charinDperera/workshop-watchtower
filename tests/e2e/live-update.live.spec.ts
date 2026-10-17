@@ -7,7 +7,7 @@
 import { readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { APIRequestContext } from '@playwright/test';
-import type { Snapshot } from '../../src/lib/types';
+import type { Snapshot } from '../../src/shared/types';
 import {
   councilMember,
   expect,

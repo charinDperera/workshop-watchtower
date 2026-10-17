@@ -2,7 +2,7 @@
  * /limforia (filters, the record viewer, a bad path) and /activity (filters, Older paging,
  * unattributed subagent events).
  */
-import type { ActivityPage, Snapshot } from '../../src/lib/types';
+import type { ActivityPage, Snapshot } from '../../src/shared/types';
 import { expect, OWN_STATUS, test, waitForLive } from './support/test';
 import { SEEDED_AGENT, SEEDED_EVENTS, UNATTRIBUTED_EVENTS } from './support/workstation';
 

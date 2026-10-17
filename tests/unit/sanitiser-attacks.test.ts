@@ -1,5 +1,5 @@
 /**
- * Peter's attack suite for the markdown sanitiser (src/lib/render/markdown.ts) and for the
+ * Peter's attack suite for the markdown sanitiser (src/server/render/markdown.ts) and for the
  * page-side transforms that run on its output (src/ui/record-html.ts). Every vector must come
  * out inert: no executable element, no event handler attribute, no script-capable URL.
  *

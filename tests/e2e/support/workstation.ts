@@ -31,6 +31,12 @@ export const OUTSIDE_DIR = join(E2E_BASE, 'outside');
 export const MARKER = '.watchtower-e2e-disposable';
 export const OUTSIDE_SECRET = 'E2E-OUTSIDE-SECRET';
 
+/** The e2e server: never 4321, which belongs to the User's server and Raphael's container. */
+export const E2E_PORT = 4399;
+export const E2E_HOST = `127.0.0.1:${E2E_PORT}`;
+/** The e2e server's LOG_DIR (bff/ and client/ JSONL files), emptied for every run. */
+export const E2E_LOG_DIR = join(E2E_BASE, 'logs');
+
 /** Older events seeded into the rotated log: Uriel searching, two per second apart. */
 export const SEEDED_EVENTS = 60;
 export const SEEDED_AGENT = 'uriel';
@@ -85,6 +91,8 @@ export function prepareWorkstation(root: string = DEFAULT_ROOT): string {
   }
   rmSync(target, { recursive: true, force: true });
   rmSync(OUTSIDE_DIR, { recursive: true, force: true });
+  rmSync(E2E_LOG_DIR, { recursive: true, force: true });
+  mkdirSync(E2E_LOG_DIR, { recursive: true });
   mkdirSync(target, { recursive: true });
   cpSync(FIXTURE, target, { recursive: true });
 

@@ -15,7 +15,17 @@ services:
         source: ../..
         target: /workstation
         read_only: true
+      # Logs (ADR-005): the one writable bind mount. A separate path, not nested under the
+      # read-only /workstation tree. The same files are visible read-only at
+      # /workstation/limforia/logs/watchtower, which the watcher always ignores.
+      - type: bind
+        source: ../../limforia/logs/watchtower
+        target: /var/log/app
+        read_only: false
+        bind:
+          create_host_path: true
     environment:
+      LOG_DIR: /var/log/app
       # Published-port traffic reaches the container from this network's gateway, not from
       # 192.168.65.x: measured on Docker Desktop 4.95 for Windows (WSL 2), where the server saw
       # its peer as 172.30.43.1 (see README). Only that one address is trusted, besides the
