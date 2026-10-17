@@ -3,7 +3,7 @@
  * redaction, log files, the middleware pipeline, the log-folder watch rule, dynamic wings
  * and the client reporter.
  */
-import { mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
 import {
@@ -20,6 +20,7 @@ import { reportClientError } from '../../src/server/handlers/client-errors';
 import { getHealth } from '../../src/server/handlers/health';
 import { getRecord } from '../../src/server/handlers/record';
 import { getSnapshot } from '../../src/server/handlers/snapshot';
+import { openStream } from '../../src/server/handlers/stream';
 import { ignoredPrefixes } from '../../src/server/live/runtime';
 import { isIgnoredChange } from '../../src/server/live/watch-filter';
 import { scanTree } from '../../src/server/live/poll-watcher';
@@ -499,6 +500,96 @@ describe('middleware pipeline', () => {
     );
     expect(response.status).toBe(302);
     expect(response.headers.get('x-request-id')).toBeTruthy();
+  });
+});
+
+describe('review fixes', () => {
+  it('accepts client reports from the public origin exactly, and still from this server', () => {
+    const origin = 'https://dev-watchtower.workshop.io';
+    const h = (o: Record<string, string>) => new Headers(o);
+    expect(() =>
+      assertSameOrigin(
+        h({ host: 'dev-watchtower.workshop.io', origin, 'sec-fetch-site': 'same-origin' }),
+        origin,
+      ),
+    ).not.toThrow();
+    expect(() =>
+      assertSameOrigin(h({ host: '127.0.0.1:4321', origin: 'http://127.0.0.1:4321' }), origin),
+    ).not.toThrow();
+    // `http://<Host>` is this server's own origin, so it stays accepted (as specified).
+    expect(() =>
+      assertSameOrigin(
+        h({ host: 'dev-watchtower.workshop.io', origin: 'http://dev-watchtower.workshop.io' }),
+        origin,
+      ),
+    ).not.toThrow();
+    for (const bad of ['https://evil.test', `${origin}.evil.test`, 'https://workshop.io']) {
+      expect(() =>
+        assertSameOrigin(h({ host: 'dev-watchtower.workshop.io', origin: bad }), origin),
+      ).toThrow('Cross-origin reports are not accepted');
+    }
+    // Without a public origin, the gateway's origin is refused.
+    expect(() => assertSameOrigin(h({ host: 'dev-watchtower.workshop.io', origin }))).toThrow();
+  });
+
+  it('sends the stream with X-Accel-Buffering: no, for the proxy', async () => {
+    const service = {
+      get: async () => ({ version: 1 }) as never,
+      subscribe: () => () => {},
+      markSent: () => {},
+    };
+    const abort = new AbortController();
+    const response = openStream(abort.signal, { service });
+    expect(response.headers.get('x-accel-buffering')).toBe('no');
+    expect(response.headers.get('content-type')).toBe('text/event-stream; charset=utf-8');
+    abort.abort();
+    await response.body?.cancel();
+  });
+
+  it('keeps the stack when an error is logged', () => {
+    const log = capture();
+    log.system.error('test.failed', 'Something failed', { err: new Error('boom') });
+    const [line] = log.entries();
+    expect(line?.err).toMatchObject({ type: 'Error', message: 'boom' });
+    expect(String((line?.err as { stack?: string }).stack)).toContain('standards.test.ts');
+  });
+
+  it('redacts the wider set of credential names, three levels deep', () => {
+    const log = capture();
+    log.forRequest('req-redact02').info('test.redaction', 'More secrets', {
+      api_key: 'SECRET-1',
+      accessToken: 'SECRET-2',
+      refresh_token: 'SECRET-3',
+      'x-api-key': 'SECRET-4',
+      a: { b: { c: { accessToken: 'SECRET-5', refreshToken: 'SECRET-6' } } },
+      req: { headers: { 'x-api-key': 'SECRET-7', cookie: 'SECRET-8' } },
+    });
+    expect(log.lines.join('')).not.toContain('SECRET');
+  });
+
+  it('never changes the sinks array it is given', () => {
+    const temp = makeTempDir('sinks-');
+    try {
+      const sinks = [{ write: () => true }];
+      createLogger({ service: 'bff', env: 'test', level: 'info', logDir: temp.dir, sinks });
+      expect(sinks).toHaveLength(1);
+    } finally {
+      temp.cleanup();
+    }
+  });
+
+  it('re-creates a log folder removed while running, and keeps writing', () => {
+    const temp = makeTempDir('enoent-');
+    try {
+      const dir = join(temp.dir, 'bff');
+      const file = new DailyFile(dir, () => new Date('2026-10-17T12:00:00Z'));
+      file.write('{"n":1}\n');
+      rmSync(dir, { recursive: true, force: true });
+      file.write('{"n":2}\n');
+      expect(readFileSync(join(dir, '2026-10-17.jsonl'), 'utf8')).toBe('{"n":2}\n');
+    } finally {
+      temp.cleanup();
+    }
   });
 });
 

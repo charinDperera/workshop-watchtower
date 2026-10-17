@@ -4,7 +4,7 @@
 // checks again in production and is the only check under `astro dev`.
 // Typed facade for the app: `src/server/security/request-guard.ts`.
 
-import { createClientMatcher } from './server-env.mjs';
+import { createClientMatcher, hostOfOrigin } from './server-env.mjs';
 
 export const SERVER_PORT = 4321;
 
@@ -43,8 +43,12 @@ export const DEFAULT_POLICY = Object.freeze({
  */
 export function createRequestPolicy(settings) {
   const trusted = settings.container ? createClientMatcher(settings.trustedClients) : () => false;
+  // Behind the workstation gateway the browser's Host is the public origin's host. Only the
+  // Host header is admitted from it: X-Forwarded-* is never trusted, and the peer check
+  // (WATCHTOWER_TRUSTED_CLIENTS) stays the trust boundary.
+  const publicHost = settings.publicOrigin ? [hostOfOrigin(settings.publicOrigin)] : [];
   return {
-    allowedHosts: [...DEFAULT_ALLOWED_HOSTS, ...settings.allowedHosts],
+    allowedHosts: [...DEFAULT_ALLOWED_HOSTS, ...settings.allowedHosts, ...publicHost],
     isTrustedPeer: (address) => isLoopbackAddress(address) || trusted(address),
   };
 }

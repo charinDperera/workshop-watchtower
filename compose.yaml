@@ -1,15 +1,15 @@
-# Local run of the Watchtower in a container: `docker compose up --build`, then open
-# http://localhost:4321/. The workstation (two folders up, F:\Projects) is mounted read-only.
+# The Watchtower in a container, behind the workshop gateway (infra/gateway):
+# https://dev-watchtower.workshop.io. Start the gateway first (it creates the `workshop`
+# network), then `docker compose up --build` here. No port is published: the gateway is the
+# only way in. The workstation (two folders up, F:\Projects) is mounted read-only.
 name: watchtower
 
 services:
   watchtower:
     build: .
     image: watchtower:0.1.0
+    # Also the DNS name the gateway proxies to (http://watchtower:4321).
     container_name: watchtower
-    # Published on the host's loopback only. Never widen this to 0.0.0.0.
-    ports:
-      - '127.0.0.1:4321:4321'
     volumes:
       - type: bind
         source: ../..
@@ -26,13 +26,13 @@ services:
           create_host_path: true
     environment:
       LOG_DIR: /var/log/app
-      # Published-port traffic reaches the container from this network's gateway, not from
-      # 192.168.65.x: measured on Docker Desktop 4.95 for Windows (WSL 2), where the server saw
-      # its peer as 172.30.43.1 (see README). Only that one address is trusted, besides the
-      # container's own loopback (the HEALTHCHECK). Keep it in step with `gateway` below.
-      WATCHTOWER_TRUSTED_CLIENTS: 172.30.43.1
+      # The gateway's fixed address on the `workshop` network (infra/gateway/compose.yaml).
+      # Only that one peer is trusted, besides the container's own loopback (HEALTHCHECK).
+      WATCHTOWER_TRUSTED_CLIENTS: 172.30.50.2
+      # The public origin: admits its Host header and is the origin for same-origin checks.
+      WATCHTOWER_PUBLIC_ORIGIN: https://dev-watchtower.workshop.io
     networks:
-      - watchtower
+      - workshop
     read_only: true
     tmpfs:
       - /tmp
@@ -44,9 +44,5 @@ services:
     # The healthcheck comes from the image (Dockerfile HEALTHCHECK).
 
 networks:
-  watchtower:
-    name: watchtower
-    ipam:
-      config:
-        - subnet: 172.30.43.0/28
-          gateway: 172.30.43.1
+  workshop:
+    external: true

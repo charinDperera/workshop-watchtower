@@ -10,6 +10,7 @@ export const PATHS = {
   intel: 'intel',
   catalog: 'limforia/CATALOG.md',
   auditHall: 'limforia/audit-hall',
+  reliquary: 'limforia/reliquary',
   templates: 'limforia/templates',
   apps: 'apps',
   events: '.watchtower/events.jsonl',
@@ -18,6 +19,16 @@ export const PATHS = {
   /** Application logs (ADR-005): not an archive wing, and never watched. */
   logs: 'limforia/logs',
 } as const;
+
+/** The wing id of a `limforia/<wing>` path, e.g. `audit-hall` for `PATHS.auditHall`. */
+export function wingIdOf(path: string): string {
+  return path.split('/')[1] ?? path;
+}
+
+/** True when `path` is inside the folder `dir` (both workstation-relative). */
+export function isInsideDir(path: string, dir: string): boolean {
+  return path.startsWith(`${dir}/`);
+}
 
 /** The only Host header values answered by default (defined with the guard). */
 export { DEFAULT_ALLOWED_HOSTS as ALLOWED_HOSTS } from './security/request-guard';

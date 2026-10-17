@@ -70,11 +70,27 @@ export function createExecGit(options: GitEnvOptions = { safeDirectory: false })
 /** The host runner. */
 export const execGit: GitRunner = createExecGit();
 
+/**
+ * Fixed options before every command: never start a filesystem monitor daemon, and never run
+ * hooks, whatever the repository's own config says (a mounted repo is not ours to trust).
+ */
+export const GIT_SAFETY_ARGS: readonly string[] = [
+  '-c',
+  'core.fsmonitor=false',
+  '-c',
+  'core.hooksPath=',
+];
+
+/** The full argument list for one git call: the safety options, then the command. */
+export function gitArgs(args: readonly string[]): string[] {
+  return [...GIT_SAFETY_ARGS, ...args];
+}
+
 const runGit = (cwd: string, args: readonly string[], env: NodeJS.ProcessEnv): Promise<string> =>
   new Promise((resolve, reject) => {
     execFile(
       'git',
-      [...args],
+      gitArgs(args),
       {
         cwd,
         timeout: GIT_TIMEOUT_MS,

@@ -6,6 +6,7 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import type { ArchiveRecord } from '../../shared/types';
+  import { TEMPLATES_WING } from '../../shared/wings';
   import {
     filterRecords,
     hasFilter,
@@ -39,7 +40,7 @@
   const records = $derived(live.snapshot ? filterRecords(live.snapshot.records, filter) : initial);
   const scope = $derived(live.snapshot ? scopeCount(live.snapshot.records, filter) : initialScope);
   const filtered = $derived(hasFilter(filter));
-  const noun = $derived(filter.wing === 'templates' ? 'template' : 'record');
+  const noun = $derived(filter.wing === TEMPLATES_WING ? 'template' : 'record');
 </script>
 
 <div class="flex flex-col gap-3">

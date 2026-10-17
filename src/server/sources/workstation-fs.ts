@@ -37,7 +37,7 @@ export function createWorkstationFs(root: string): WorkstationFs {
       if (isMissing(err)) return null;
       systemLog().warn('source.read_failed', 'Cannot read a workstation file', {
         path: relPath,
-        err: (err as Error).message,
+        err,
       });
       return null;
     }
@@ -53,7 +53,7 @@ export function createWorkstationFs(root: string): WorkstationFs {
         if (!isMissing(err))
           systemLog().warn('source.list_failed', 'Cannot list a workstation folder', {
             path: dir,
-            err: (err as Error).message,
+            err,
           });
         return;
       }
@@ -81,7 +81,7 @@ export function createWorkstationFs(root: string): WorkstationFs {
       if (!isMissing(err))
         systemLog().warn('source.list_failed', 'Cannot list a workstation folder', {
           path: relDir,
-          err: (err as Error).message,
+          err,
         });
       return [];
     }

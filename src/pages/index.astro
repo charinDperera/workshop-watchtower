@@ -1,7 +1,8 @@
 ---
 /**
- * Overview: The Council at a glance (the hierarchy, live), the Order of Work, the archive, the laws, the latest
- * commits and the live activity feed. Server-rendered from the snapshot; islands keep
+ * Overview: who of The Council is at work now and who was last active, the Order of Work,
+ * the archive, the laws, the latest commits and the live activity feed. The whole Council
+ * tree lives on /host. Server-rendered from the snapshot; islands keep
  * every panel live.
  */
 import ErrorState from '../components/ErrorState.svelte';
@@ -10,7 +11,7 @@ import Panel from '../components/Panel.astro';
 import LiveActivity from '../components/live/LiveActivity.svelte';
 import LiveCommits from '../components/live/LiveCommits.svelte';
 import LiveCompliance from '../components/live/LiveCompliance.svelte';
-import LiveCouncil from '../components/live/LiveCouncil.svelte';
+import LiveAtWork from '../components/live/LiveAtWork.svelte';
 import LiveOverviewStats from '../components/live/LiveOverviewStats.svelte';
 import LivePipeline from '../components/live/LivePipeline.svelte';
 import LiveWings from '../components/live/LiveWings.svelte';
@@ -62,16 +63,16 @@ const feedSeed = snapshot
 
   <div class="flex flex-col gap-6">
     <Panel
-      id="council-heading"
-      title="The Council"
-      eyebrow="The hierarchy, live"
+      id="at-work-heading"
+      title="At work"
+      eyebrow="Live"
       moreHref="/host"
-      moreLabel="Open The Council"
+      moreLabel="See the whole Council"
       illuminated
     >
-      <LiveCouncil
+      <LiveAtWork
         client:load
-        initial={snapshot ? councilSeed(snapshot) : null}
+        initial={snapshot ? councilSeed(snapshot).agents : null}
         now={now}
         error={error}
         retryHref={retryHref}

@@ -13,8 +13,8 @@
     name: string;
     status: AgentStatus;
     rank: Agent['rank'];
-    /** `hero` is the agent page; the others are the tiers of the tree. */
-    size?: 'hero' | 'tier';
+    /** `hero` is the agent page, `tier` the Council tree, `card` the Overview's At work. */
+    size?: 'hero' | 'tier' | 'card';
   }
   let { name, status, rank, size = 'tier' }: Props = $props();
 
@@ -23,17 +23,27 @@
 
   /*
    * The frame (outer box) and the seal inside it, per rank and size. The Overseer's frame is
-   * wider than the seal to hold the rays.
+   * wider than the seal to hold the rays. Cards share one frame size across ranks, so names
+   * line up in a row of cards. The tree's top-tier layout (CouncilTree) relies on the sm
+   * tier frames: Overseer size-48, Counsel size-28.
    */
   const FRAME = {
-    overseer: { tier: 'size-52 sm:size-60', hero: 'size-48 sm:size-56' },
-    counsel: { tier: 'size-28 sm:size-32', hero: 'size-36 sm:size-40' },
-    worker: { tier: 'size-24 sm:size-28', hero: 'size-32 sm:size-36' },
+    overseer: {
+      tier: 'size-44 sm:size-48',
+      hero: 'size-48 sm:size-56',
+      card: 'size-20 sm:size-24',
+    },
+    counsel: { tier: 'size-24 sm:size-28', hero: 'size-36 sm:size-40', card: 'size-20 sm:size-24' },
+    worker: { tier: 'size-20 sm:size-24', hero: 'size-32 sm:size-36', card: 'size-20 sm:size-24' },
   } as const;
   const SEAL = {
-    overseer: { tier: 'size-28 sm:size-32', hero: 'size-26 sm:size-30' },
-    counsel: { tier: 'size-22 sm:size-26', hero: 'size-28 sm:size-32' },
-    worker: { tier: 'size-20 sm:size-24', hero: 'size-28 sm:size-32' },
+    overseer: {
+      tier: 'size-24 sm:size-26',
+      hero: 'size-26 sm:size-30',
+      card: 'size-11 sm:size-14',
+    },
+    counsel: { tier: 'size-18 sm:size-22', hero: 'size-28 sm:size-32', card: 'size-15 sm:size-18' },
+    worker: { tier: 'size-16 sm:size-20', hero: 'size-28 sm:size-32', card: 'size-16 sm:size-20' },
   } as const;
   const frame = $derived(FRAME[rank][size]);
   const seal = $derived(SEAL[rank][size]);

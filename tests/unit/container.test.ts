@@ -25,7 +25,7 @@ import {
   type TrustedClient,
 } from '../../src/server/config/env';
 import { createRequestPolicy, guardRequest } from '../../src/server/security/request-guard';
-import { gitEnv } from '../../src/server/sources/git';
+import { createExecGit, GIT_SAFETY_ARGS, gitArgs, gitEnv } from '../../src/server/sources/git';
 import {
   diffTrees,
   pollWorkstation,
@@ -56,6 +56,7 @@ describe('server settings from the environment (the one validator)', () => {
       pollMs: null,
       logLevel: 'info',
       logDir: join(ROOT_DEFAULT, 'limforia', 'logs', 'watchtower'),
+      publicOrigin: null,
     });
     expect(Object.isFrozen(settings)).toBe(true);
   });
@@ -224,6 +225,7 @@ describe('server settings from the environment (the one validator)', () => {
       extraAllowedHosts: 0,
       watch: 'fs.watch',
       logLevel: 'info',
+      publicOrigin: null,
     });
   });
 });
@@ -303,7 +305,143 @@ describe('start script', () => {
   });
 });
 
+describe('behind the workstation gateway (WATCHTOWER_PUBLIC_ORIGIN)', () => {
+  const ORIGIN = 'https://dev-watchtower.workshop.io';
+  const gateway = () =>
+    readServerEnv({
+      WATCHTOWER_CONTAINER: '1',
+      WATCHTOWER_TRUSTED_CLIENTS: '172.30.50.2',
+      WATCHTOWER_PUBLIC_ORIGIN: ORIGIN,
+    }) as ServerEnv;
+
+  it('accepts a strict origin, normalised, and shows it in the startup summary', () => {
+    expect(gateway().publicOrigin).toBe(ORIGIN);
+    expect(
+      readServerEnv({ WATCHTOWER_PUBLIC_ORIGIN: 'HTTPS://Dev-Watchtower.Workshop.io' })
+        .publicOrigin,
+    ).toBe(ORIGIN);
+    expect(readServerEnv({ WATCHTOWER_PUBLIC_ORIGIN: 'http://localhost:8080' }).publicOrigin).toBe(
+      'http://localhost:8080',
+    );
+    expect(summariseServerEnv(gateway())).toMatchObject({ publicOrigin: ORIGIN });
+  });
+
+  it.each([
+    'https://dev-watchtower.workshop.io/',
+    'https://dev-watchtower.workshop.io/app',
+    'https://dev-watchtower.workshop.io?x=1',
+    'https://dev-watchtower.workshop.io#top',
+    'https://user:SECRET@dev-watchtower.workshop.io',
+    'https://dev-watchtower.workshop.io:443',
+    'ftp://dev-watchtower.workshop.io',
+    'dev-watchtower.workshop.io',
+    'SECRET-not-a-url',
+  ])('rejects %s, by name only', (value) => {
+    const result = loadEnv({ WATCHTOWER_PUBLIC_ORIGIN: value });
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.variables).toEqual(['WATCHTOWER_PUBLIC_ORIGIN']);
+      expect(result.error).toContain('must be an http or https origin with no path');
+      expect(result.error).not.toContain('SECRET');
+      expect(result.error).not.toContain('dev-watchtower');
+    }
+  });
+
+  it('admits the gateway Host and the gateway peer, and nothing via X-Forwarded-*', () => {
+    const policy = createRequestPolicy(gateway());
+    const req = (host: string, address: string) => ({ host, address, aborted: false });
+    // nginx (172.30.50.2) with Host: dev-watchtower.workshop.io
+    expect(guardRequest(req('dev-watchtower.workshop.io', '172.30.50.2'), policy)).toEqual({
+      allow: true,
+    });
+    // The same Host from any other peer is still refused: the peer check is the boundary.
+    expect(guardRequest(req('dev-watchtower.workshop.io', '172.30.50.9'), policy)).toMatchObject({
+      allow: false,
+      status: 403,
+    });
+    // A port in the origin is part of the admitted Host.
+    const ported = createRequestPolicy(
+      readServerEnv({ WATCHTOWER_PUBLIC_ORIGIN: 'http://gw.test:8080' }) as ServerEnv,
+    );
+    expect(guardRequest(req('gw.test:8080', '127.0.0.1'), ported)).toEqual({ allow: true });
+    expect(guardRequest(req('gw.test', '127.0.0.1'), ported)).toMatchObject({ allow: false });
+    // Without the variable the gateway Host is refused.
+    expect(
+      guardRequest(
+        req('dev-watchtower.workshop.io', '127.0.0.1'),
+        createRequestPolicy(readServerEnv({}) as ServerEnv),
+      ),
+    ).toMatchObject({ allow: false });
+  });
+});
+
+describe('fail fast with a useful message', () => {
+  it('in container mode, a missing workstation says how to run it', () => {
+    const result = loadEnv({
+      WATCHTOWER_CONTAINER: '1',
+      WATCHTOWER_ROOT: 'F:/no/such/workstation',
+    });
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.variables).toEqual(['WATCHTOWER_ROOT']);
+      expect(result.error).toContain(
+        'No workstation is mounted at /workstation. Run The Watchtower with `docker compose up` from apps/watchtower (see README).',
+      );
+      expect(result.error).not.toContain('no/such');
+    }
+    // On the host the message stays plain.
+    const host = loadEnv({ WATCHTOWER_ROOT: 'F:/no/such/workstation' });
+    expect(host.ok).toBe(false);
+    if (!host.ok) expect(host.error).toContain('WATCHTOWER_ROOT is not an existing directory');
+  });
+
+  it('refuses a LOG_DIR that is the workstation root or above it', () => {
+    const temp = makeTempDir('root-');
+    try {
+      for (const dir of [temp.dir, join(temp.dir, '..')]) {
+        const result = loadEnv({ WATCHTOWER_ROOT: temp.dir, LOG_DIR: dir });
+        expect(result.ok).toBe(false);
+        if (!result.ok) {
+          expect(result.variables).toEqual(['LOG_DIR']);
+          expect(result.error).toContain('must not be the workstation root or a folder above it');
+        }
+      }
+      // Inside the root (the default place) and outside it are both fine.
+      expect(
+        loadEnv({ WATCHTOWER_ROOT: temp.dir, LOG_DIR: join(temp.dir, 'limforia', 'logs') }).ok,
+      ).toBe(true);
+      expect(loadEnv({ WATCHTOWER_ROOT: temp.dir, LOG_DIR: '/var/log/app' }).ok).toBe(true);
+    } finally {
+      temp.cleanup();
+    }
+  });
+});
+
 describe('git in a container', () => {
+  it('always runs git with fsmonitor off and no hooks, before the command', () => {
+    expect(GIT_SAFETY_ARGS).toEqual(['-c', 'core.fsmonitor=false', '-c', 'core.hooksPath=']);
+    expect(gitArgs(['status', '--porcelain=v2'])).toEqual([
+      '-c',
+      'core.fsmonitor=false',
+      '-c',
+      'core.hooksPath=',
+      'status',
+      '--porcelain=v2',
+    ]);
+  });
+
+  it('runs the real git with those options', async () => {
+    const temp = makeTempDir('git-');
+    try {
+      const out = await createExecGit()(temp.dir, ['--version']);
+      expect(out).toMatch(/^git version /);
+    } catch (err) {
+      if ((err as { kind?: string }).kind !== 'missing-binary') throw err;
+    } finally {
+      temp.cleanup();
+    }
+  });
+
   it('changes nothing on the host', () => {
     const env = gitEnv({ PATH: 'p' }, '/workstation', { safeDirectory: false });
     expect(env).toEqual({

@@ -9,6 +9,8 @@ import { join } from 'node:path';
 import type { APIRequestContext } from '@playwright/test';
 import type { Snapshot } from '../../src/shared/types';
 import {
+  atWorkCard,
+  atWorkPanel,
   councilMember,
   expect,
   expectNoAxeViolations,
@@ -77,11 +79,13 @@ test('a summoned agent turns Active and lights its stage, without a reload', asy
   await waitForLive(page);
   const noReload = await markNoReload(page);
 
-  const peter = councilMember(page, 'Peter');
-  const michael = councilMember(page, 'Michael');
+  // At work on the Overview: nobody is at work in the fixture, so the group is absent.
+  const peter = atWorkCard(page, 'Peter');
+  const atWorkNow = atWorkPanel(page).getByRole('region', { name: /^At work now/ });
   const pipeline = page.locator('section[aria-labelledby="pipeline-heading"]');
   const testStage = pipeline.locator('ol > li').filter({ hasText: 'Test' });
-  await expect(peter.getByText('Idle', { exact: true })).toBeVisible();
+  await expect(atWorkNow).toHaveCount(0);
+  await expect(atWorkPanel(page).getByText(/The Council rests/)).toBeVisible();
   await expect(testStage.getByText('Quiet', { exact: true })).toBeVisible();
 
   const now = Date.now();
@@ -122,7 +126,9 @@ test('a summoned agent turns Active and lights its stage, without a reload', asy
   await expect(peter.getByText('Bash')).toBeVisible();
   await expect(testStage.getByText('In progress', { exact: true })).toBeVisible();
   await expect(testStage.getByText('(active)')).toHaveCount(1);
-  await expect(michael.getByText('Idle', { exact: true })).toBeVisible();
+  // Unattributed tool use must not wake Michael: he is not at work.
+  await expect(atWorkNow.getByRole('link', { name: 'Peter', exact: true })).toBeVisible();
+  await expect(atWorkNow.getByRole('link', { name: 'Michael', exact: true })).toHaveCount(0);
   const feed = page.getByRole('list', { name: 'Latest activity' });
   await expect(feed.getByText('Unnamed subagent', { exact: true }).first()).toBeVisible();
   await expect(page.locator('a[href="/host/subagent"]')).toHaveCount(0);
@@ -240,7 +246,7 @@ test('Active lapses to Idle after 5 minutes of silence, without a reload', async
   await page.goto('/');
   await waitForLive(page);
   const noReload = await markNoReload(page);
-  const peter = councilMember(page, 'Peter');
+  const peter = atWorkCard(page, 'Peter');
   await expect(peter.getByText('Active', { exact: true })).toBeVisible({ timeout: 5_000 });
   await expect(peter.getByText('Active', { exact: true })).toHaveCount(0, { timeout: 20_000 });
   // The run was never closed, so it lapsed (abandoned): the line says so instead of "Idle".
@@ -270,7 +276,8 @@ test('a run that ends in StopFailure reads "Fell silent", live', async ({ page }
       agentId: 'agent-fail',
     },
   ]);
-  const peter = councilMember(page, 'Peter');
+  // The most recent run moves Peter into "Last active", saying how it ended.
+  const peter = atWorkCard(page, 'Peter');
   await expect(peter.getByText(/Fell silent: stopped by an error/)).toBeVisible({
     timeout: 15_000,
   });
@@ -298,11 +305,13 @@ test('the Council tree follows the roster: new counsel, an unknown station, no t
       await page.reload();
       await waitForLive(page);
     }
-    const counsel = page.getByRole('region', { name: 'The Counsel' });
-    await expect(counsel.getByRole('link', { name: 'Raguel', exact: true })).toBeVisible({
+    // The Counsel stand at the Overseer's hands: the first at his right, the next at his left.
+    const rightHand = page.getByRole('list', { name: 'The Counsel, at the right hand' });
+    const leftHand = page.getByRole('list', { name: 'The Counsel, at the left hand' });
+    await expect(leftHand.getByRole('link', { name: 'Raguel', exact: true })).toBeVisible({
       timeout: 15_000,
     });
-    await expect(counsel.getByRole('link', { name: 'Uriel', exact: true })).toBeVisible();
+    await expect(rightHand.getByRole('link', { name: 'Uriel', exact: true })).toBeVisible();
     // An unknown station gets its own niche, titled as written, after the Order of Work.
     const vigil = page.getByRole('list', { name: 'Vigil' });
     await expect(vigil.getByRole('link', { name: 'Sariel', exact: true })).toBeVisible();

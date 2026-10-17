@@ -4,7 +4,7 @@
  */
 import { basename } from 'node:path';
 import type { AgentDefinition, ArchiveRecord, Snapshot, SourceProblem } from '../../shared/types';
-import { ACTIVITY_LIMIT, AGENT_RECENT_EVENTS, PATHS } from '../constants';
+import { isInsideDir, ACTIVITY_LIMIT, AGENT_RECENT_EVENTS, PATHS } from '../constants';
 import { deriveLiveStates } from './activity';
 import { newestFirst, recentEventsByAgent } from './activity-history';
 import { derivePipeline, findMainSlug, joinAgents, nextExpiry } from './agents';
@@ -92,7 +92,7 @@ export async function buildSnapshot(deps: SnapshotDeps): Promise<Snapshot> {
   const records = crossed.records;
 
   const audits = loaded
-    .filter((l) => l.record.wing === 'audit-hall')
+    .filter((l) => isInsideDir(l.record.path, PATHS.auditHall))
     .map((l) => ({ record: l.record, subject: auditSubject(l.text, l.record.header) }));
   const auditIndex = indexAuditLogs(audits);
 

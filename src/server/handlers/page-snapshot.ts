@@ -18,7 +18,7 @@ export async function loadSnapshot(): Promise<SnapshotResult> {
     return { snapshot: await getRuntime().service.get(), error: null };
   } catch (err) {
     systemLog().error('page.snapshot_failed', 'Page snapshot failed', {
-      err: (err as Error).message,
+      err,
     });
     return { snapshot: null, error: 'The workstation snapshot could not be built.' };
   }

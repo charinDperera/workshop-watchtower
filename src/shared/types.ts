@@ -6,6 +6,8 @@
  * Every timestamp is an ISO 8601 string (UTC). Every path is workstation-relative and uses `/`.
  */
 
+import type { RECORD_STATUSES, RECORD_TYPES } from './constants';
+
 /* ------------------------------------------------------------------ */
 /* Shared                                                             */
 /* ------------------------------------------------------------------ */
@@ -234,20 +236,12 @@ export interface Agent {
 /* Archive                                                            */
 /* ------------------------------------------------------------------ */
 
-export type RecordType =
-  | 'chronicle'
-  | 'audit'
-  | 'decision'
-  | 'feature'
-  | 'caveat'
-  | 'issue'
-  | 'intel'
-  | 'idea'
-  | 'reliquary';
+/** A record type of the Constitution's header (see `RECORD_TYPES`). */
+export type RecordType = (typeof RECORD_TYPES)[number];
 
-export type RecordStatus = 'open' | 'closed' | 'accepted' | 'superseded';
+/** A record status of the Constitution's header (see `RECORD_STATUSES`). */
+export type RecordStatus = (typeof RECORD_STATUSES)[number];
 
-/** Top-level areas a record can live in. Scriptorium records also carry a `subWing`. */
 /**
  * A wing: the name of a `limforia/` subfolder (discovered, so a new wing needs no app
  * change; `logs/` is not a wing), `intel` for Uriel's reports, or `other` for a record

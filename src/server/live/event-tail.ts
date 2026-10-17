@@ -11,8 +11,8 @@ import type { ActivityEvent } from '../../shared/types';
 import { AgentAttributor } from '../services/attribution';
 import { parseEventLine, splitCompleteLines } from '../sources/parse/events';
 
-/** Never read more than this per poll, so a huge burst cannot stall the server. */
-const MAX_READ_BYTES = 1024 * 1024;
+/** The log is read in chunks of at most this size; one poll drains every chunk. */
+export const MAX_READ_BYTES = 1024 * 1024;
 
 interface FileId {
   size: number;
@@ -84,23 +84,30 @@ export class EventTail {
     }
     if (id.size <= this.offset) return [];
 
-    const length = Math.min(id.size - this.offset, MAX_READ_BYTES);
+    // Drain the whole backlog in chunks of at most MAX_READ_BYTES (a burst larger than one
+    // chunk is not left waiting for the next file event). The log rotates at 5 MB, so a
+    // backlog is bounded.
+    const events: ActivityEvent[] = [];
     const handle = await open(this.file, 'r');
-    let chunk: string;
     try {
-      const buffer = Buffer.alloc(length);
-      const { bytesRead } = await handle.read(buffer, 0, length, this.offset);
-      this.offset += bytesRead;
-      chunk = this.decoder.write(buffer.subarray(0, bytesRead));
+      const buffer = Buffer.alloc(Math.min(id.size - this.offset, MAX_READ_BYTES));
+      while (this.offset < id.size) {
+        const length = Math.min(id.size - this.offset, buffer.length);
+        const { bytesRead } = await handle.read(buffer, 0, length, this.offset);
+        if (bytesRead === 0) break;
+        this.offset += bytesRead;
+        const { lines, rest } = splitCompleteLines(
+          this.partial + this.decoder.write(buffer.subarray(0, bytesRead)),
+        );
+        this.partial = rest;
+        for (const line of lines) {
+          const event = parseEventLine(line);
+          if (event) events.push(this.attributor.attribute(event));
+        }
+      }
     } finally {
       await handle.close();
     }
-
-    const { lines, rest } = splitCompleteLines(this.partial + chunk);
-    this.partial = rest;
-    return lines
-      .map(parseEventLine)
-      .filter((e): e is ActivityEvent => e !== null)
-      .map((e) => this.attributor.attribute(e));
+    return events;
   }
 }

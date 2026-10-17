@@ -7,7 +7,16 @@
 
 import { createReadStream } from 'node:fs';
 import { lstat } from 'node:fs/promises';
+import { pipeline } from 'node:stream/promises';
 import { extname, resolve, sep } from 'node:path';
+
+/** Error codes that mean the client went away, not that the file could not be read. */
+const CLIENT_GONE = new Set(['ERR_STREAM_PREMATURE_CLOSE', 'ECONNRESET', 'EPIPE']);
+
+/** True when a stream failed only because the client closed the connection. */
+export function isClientAbort(err) {
+  return CLIENT_GONE.has(err?.code);
+}
 
 /** Content types for what an Astro build emits. Unknown types are sent as bytes. */
 export const CONTENT_TYPES = Object.freeze({
@@ -83,13 +92,14 @@ export function createStaticHandler(root) {
       res.end();
       return true;
     }
-    // A read error rejects: the edge (http-server.mjs) logs it once and ends the response.
-    await new Promise((done, fail) => {
-      const stream = createReadStream(file);
-      stream.on('error', fail);
-      stream.on('end', done);
-      stream.pipe(res);
-    });
+    // pipeline() destroys the file stream when the client goes away, so no descriptor
+    // leaks. A client abort is normal; a read error rejects, and the edge
+    // (http-server.mjs) logs it once and ends the response.
+    try {
+      await pipeline(createReadStream(file), res);
+    } catch (err) {
+      if (!isClientAbort(err)) throw err;
+    }
     return true;
   };
 }

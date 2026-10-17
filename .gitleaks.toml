@@ -1,0 +1,24 @@
+# gitleaks configuration for The Watchtower. Run from the app folder:
+#   gitleaks dir . --config .gitleaks.toml --redact
+# The default rules apply; the allowlist only skips paths that must not or need not be scanned.
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Skip dependencies, caches, build output and real environment files"
+paths = [
+  # Dependencies, the pnpm store, local caches and build output.
+  '''(^|[\/])node_modules([\/]|$)''',
+  '''(^|[\/])\.pnpm-store([\/]|$)''',
+  '''(^|[\/])\.local([\/]|$)''',
+  '''(^|[\/])dist([\/]|$)''',
+  '''(^|[\/])\.astro([\/]|$)''',
+  # Real environment files are sealed (Commandment 1, env-management): a scan must never open
+  # them. Go's regexp has no lookahead, so the names are listed explicitly. `.env.example` is
+  # deliberately NOT excluded: it is committed, and scanning it catches real secrets pasted
+  # into it by mistake. Added with the User's explicit one-time permission on 2026-10-17.
+  '''(^|[\/])\.env$''',
+  '''(^|[\/])\.env\.(local|dev|development|prod|production|test|testing|staging|ci)$''',
+  '''(^|[\/])\.env\.[^\/]+\.local$''',
+]

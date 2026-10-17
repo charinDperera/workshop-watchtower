@@ -1,5 +1,6 @@
 /** The headline figures on the Overview, derived from a snapshot. Pure. */
 import type { Snapshot } from '../shared/types';
+import { TEMPLATES_WING } from '../shared/wings';
 import type { Tone } from './format';
 import { plural } from './format';
 
@@ -18,7 +19,7 @@ export function overviewTiles(snapshot: Snapshot): Tile[] {
   const strikes = agents.reduce((sum, a) => sum + (a.strikes ?? 0), 0);
   const struck = agents.filter((a) => (a.strikes ?? 0) > 0).map((a) => a.name);
   const records = snapshot.records.filter((r) => !r.isTemplate).length;
-  const wingsInUse = snapshot.wings.filter((w) => w.id !== 'templates' && w.count > 0).length;
+  const wingsInUse = snapshot.wings.filter((w) => w.id !== TEMPLATES_WING && w.count > 0).length;
   const { pass, warn, fail, checks } = snapshot.compliance;
   const repo = snapshot.git.workstation;
 

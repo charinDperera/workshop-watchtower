@@ -4,7 +4,7 @@
  */
 import { RECORD_STATUSES, RECORD_TYPES } from '../shared/constants';
 import type { ArchiveRecord, WingId } from '../shared/types';
-import { isWingId as isWellFormedWing } from '../shared/wings';
+import { isWingId as isWellFormedWing, TEMPLATES_WING } from '../shared/wings';
 
 export interface ArchiveFilter {
   wing: WingId | null;
@@ -77,7 +77,7 @@ const same = (a: string, b: string) => a.toLowerCase() === b.toLowerCase();
 
 /** Templates are not records: they show only when their own wing is chosen. */
 function inScope(record: ArchiveRecord, filter: ArchiveFilter): boolean {
-  return filter.wing === 'templates' ? record.isTemplate : !record.isTemplate;
+  return filter.wing === TEMPLATES_WING ? record.isTemplate : !record.isTemplate;
 }
 
 export function matchesFilter(record: ArchiveRecord, filter: ArchiveFilter): boolean {

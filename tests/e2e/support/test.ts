@@ -118,3 +118,18 @@ export function councilMember(page: Page, name: string) {
     .filter({ has: page.getByRole('link', { name, exact: true }) })
     .last();
 }
+
+/** The Overview's "At work" panel. */
+export function atWorkPanel(page: Page) {
+  return page.getByRole('region', { name: 'At work', exact: true });
+}
+
+/**
+ * An agent's card in the Overview's "At work" panel, in whichever group it stands
+ * ("At work now" or "Last active"): the list item holding the link to the agent's page.
+ */
+export function atWorkCard(page: Page, name: string) {
+  return atWorkPanel(page)
+    .getByRole('listitem')
+    .filter({ has: page.getByRole('link', { name, exact: true }) });
+}

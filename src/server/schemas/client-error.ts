@@ -72,13 +72,17 @@ export function parseClientErrorReport(body: unknown): ClientErrorReport {
 
 /**
  * Same-origin only: the browser's `Origin` must be this server's own origin (the Host
- * header already passed the guard), and `Sec-Fetch-Site`, when sent, must agree.
+ * header already passed the guard) or exactly WATCHTOWER_PUBLIC_ORIGIN, and
+ * `Sec-Fetch-Site`, when sent, must agree.
  */
-export function assertSameOrigin(headers: Headers): void {
+export function assertSameOrigin(headers: Headers, publicOrigin: string | null = null): void {
   const host = headers.get('host');
   const origin = headers.get('origin');
   const site = headers.get('sec-fetch-site');
-  if (!host || origin !== `http://${host}` || (site !== null && site !== 'same-origin')) {
+  // This server's own origin, or exactly the configured public origin (the gateway).
+  const own = host !== null && origin === `http://${host}`;
+  const viaGateway = publicOrigin !== null && origin === publicOrigin;
+  if (!(own || viaGateway) || (site !== null && site !== 'same-origin')) {
     throw new ForbiddenError('Cross-origin reports are not accepted');
   }
 }

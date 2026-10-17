@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import { posix } from 'node:path';
 import type { ArchiveRecord, RecordHeader, WingId } from '../../../shared/types';
-import { PATHS, RECORD_STATUSES, RECORD_TYPES } from '../../constants';
+import { isInsideDir, PATHS, RECORD_STATUSES, RECORD_TYPES } from '../../constants';
 
 /** The wing of a record directly in `limforia/`, outside any wing folder. */
 export const OTHER_WING = 'other';
@@ -126,7 +126,7 @@ export function parseRecord(path: string, text: string): ArchiveRecord {
     hasHeader: front.data !== null,
     headerValid: headerProblems.length === 0,
     headerProblems,
-    isTemplate: wing === 'templates',
+    isTemplate: isInsideDir(path, PATHS.templates),
     inCatalog: false,
     revision: revisionOf(text),
   };

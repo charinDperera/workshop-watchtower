@@ -13,7 +13,8 @@ pnpm build
 pnpm start
 ```
 
-`pnpm start` runs `scripts/start.mjs`, which always binds to `127.0.0.1:4321`.
+`pnpm start` runs `scripts/start.mjs`. On the host it always binds to `127.0.0.1` (the
+address is fixed); the port is `4321` unless `PORT` sets another.
 Do not start `dist/server/entry.mjs` directly: it no longer starts a server.
 
 ### In Docker
@@ -78,6 +79,20 @@ before the built server is loaded, and the bundle cannot be imported for that. S
 still exactly one implementation: `env.ts` re-exports it, typed. The same applies to the
 logger (`scripts/logger.mjs`, typed in `src/server/logging/logger.ts`), which `start.mjs`
 uses for startup and shutdown lines.
+
+### Container mode and the gateway
+
+- **Docker Desktop's Run button is not supported.** It starts the image without the
+  read-only workstation mount and the trusted network that `compose.yaml` provides, so
+  the server stops at once with: "No workstation is mounted at /workstation. Run The
+  Watchtower with `docker compose up` from apps/watchtower (see README)." Use
+  `docker compose up` (see In Docker above).
+- **Behind the workstation gateway** (nginx at `https://dev-watchtower.workshop.io`), set
+  `WATCHTOWER_PUBLIC_ORIGIN` to that origin. Its host is then admitted as a Host header,
+  and `POST /api/client-errors` accepts it as the page's origin. `X-Forwarded-*` headers
+  are never trusted: the peer check (`WATCHTOWER_TRUSTED_CLIENTS`, the gateway's address)
+  stays the trust boundary. `/api/stream` sends `X-Accel-Buffering: no` so the proxy does
+  not buffer live updates.
 
 ## Logging (ADR-005)
 

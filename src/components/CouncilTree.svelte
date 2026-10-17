@@ -1,9 +1,10 @@
 <!--
   @component
-  The Council as an illuminated hierarchy. The Overseers stand at the top; a gilded spine
-  descends from them to the Order of Work, whose stations hang from a gilded bar in order
-  (Build, Test, Review, Ship, Record, then any station it does not know). The Counsel stand
-  beside the spine, joined to it by a dashed branch: connected, but not on the workers' line.
+  The Council as an illuminated hierarchy. The Overseers stand at the top, centred, with the
+  Counsel beside them as their hands, joined by short gilded links at seal height: the first
+  counsel at the right hand, the next at the left, then outward. No empty seat is drawn.
+  A short spine leads down to the Order of Work, whose stations hang from a gilded bar in
+  roster order. On narrow trees the Counsel stand directly under the Overseer.
 
   When the tree is wide enough for every worker side by side, the stations hang in a row from
   the bar; otherwise they stack as tiers down the spine, so at 360 px the tree reads as a
@@ -47,7 +48,8 @@
   const tiers = $derived(agents ? councilTiers(agents, stages ?? []) : null);
   const tierTag = $derived(`h${level}`);
   const stationTag = $derived(`h${level + 1}`);
-  // Counsel alternate sides of the spine, the first on the right.
+  // Counsel stand at the Overseer's hands: the first at his right (the viewer's right), the
+  // second at his left, then alternating outward.
   const counselRight = $derived(tiers?.counsel.filter((_, i) => i % 2 === 0) ?? []);
   const counselLeft = $derived(tiers?.counsel.filter((_, i) => i % 2 === 1) ?? []);
 
@@ -83,15 +85,12 @@
   </div>
 {/snippet}
 
-{#snippet counselSide(members: Agent[], side: 'left' | 'right')}
-  <ul class="flex flex-col gap-6 {side === 'right' ? 'items-start' : 'items-end'}">
+{#snippet hands(members: Agent[], side: 'left' | 'right')}
+  <ul class="council-hands {side}" aria-label="The Counsel, at the {side} hand">
     {#each members as agent, i (`${agent.slug}-${i}`)}
-      <li class="flex items-start {side === 'left' ? 'flex-row-reverse' : ''}">
-        <span
-          class="mt-14 w-4 shrink-0 border-t border-dashed border-gold/70 sm:mt-16 sm:w-10 lg:w-16"
-          aria-hidden="true"
-        ></span>
-        <div class="w-32 sm:w-44"><CouncilMember {agent} {now} /></div>
+      <li class="council-hand {side}">
+        <span class="council-hand-link" aria-hidden="true"></span>
+        <div class="w-32 sm:w-40"><CouncilMember {agent} {now} /></div>
       </li>
     {/each}
   </ul>
@@ -108,42 +107,43 @@
   />
 {:else}
   <div class="council flex flex-col items-center" data-fit={fit}>
-    {#if tiers.overseers.length > 0}
-      <section aria-labelledby="{uid}-overseer" class="flex w-full flex-col items-center gap-2">
-        {@render caption(`${uid}-overseer`, tierTitle('overseer', tiers.overseers.length))}
-        <ul class="flex flex-wrap justify-center gap-x-10 gap-y-6">
+    <!-- The top tier: headings and lists are grid items, placed by area (see the styles). -->
+    <div
+      class="council-top {tiers.counsel.length === 0
+        ? 'no-counsel'
+        : counselLeft.length === 0
+          ? 'solo'
+          : ''}"
+    >
+      {#if tiers.overseers.length > 0}
+        <div class="council-ocap">
+          {@render caption(`${uid}-overseer`, tierTitle('overseer', tiers.overseers.length))}
+        </div>
+        <ul class="council-over" aria-labelledby="{uid}-overseer">
           {#each tiers.overseers as agent, i (`${agent.slug}-${i}`)}
-            <li class="w-64 max-w-full sm:w-80"><CouncilMember {agent} {now} /></li>
+            <li class="council-overseer"><CouncilMember {agent} {now} /></li>
           {/each}
         </ul>
-      </section>
-    {/if}
-
-    {#if tiers.counsel.length > 0}
-      <section aria-labelledby="{uid}-counsel" class="council-counsel w-full">
-        <!-- The spine runs down the middle column; the counsel stand to its sides. -->
-        <div class="council-spine row-span-2" aria-hidden="true"></div>
-        <div class="col-start-3 row-start-1 flex justify-start pt-4">
-          <div class="pl-2 sm:pl-10 lg:pl-16">
-            {@render caption(`${uid}-counsel`, tierTitle('counsel', tiers.counsel.length))}
-          </div>
+      {/if}
+      {#if tiers.counsel.length > 0}
+        <div class="council-ccap">
+          <span class="council-spine council-stack-only h-3" aria-hidden="true"></span>
+          {@render caption(`${uid}-counsel`, tierTitle('counsel', tiers.counsel.length))}
         </div>
-        <div class="col-start-3 row-start-2 pb-4">{@render counselSide(counselRight, 'right')}</div>
+        <div class="council-right">{@render hands(counselRight, 'right')}</div>
         {#if counselLeft.length > 0}
-          <div class="col-start-1 row-start-2 pb-4">{@render counselSide(counselLeft, 'left')}</div>
+          <div class="council-left">{@render hands(counselLeft, 'left')}</div>
         {/if}
-      </section>
-    {:else if tiers.overseers.length > 0}
-      <div class="council-spine h-10" aria-hidden="true"></div>
-    {/if}
+      {/if}
+    </div>
 
     {#if tiers.stations.length > 0}
       <section aria-labelledby="{uid}-work" class="flex w-full flex-col items-center">
-        <div class="council-spine h-6" aria-hidden="true"></div>
-        <div class="rounded-full border border-gold/50 bg-surface px-4 py-1.5">
+        <div class="council-spine h-4" aria-hidden="true"></div>
+        <div class="rounded-full border border-gold/50 bg-surface px-4 py-1">
           {@render caption(`${uid}-work`, 'The Order of Work')}
         </div>
-        <div class="council-spine h-6" aria-hidden="true"></div>
+        <div class="council-spine h-3" aria-hidden="true"></div>
 
         <ol class="council-stations w-full {fit}">
           {#each tiers.stations as station, i (station.key)}
@@ -197,16 +197,123 @@
     );
   }
 
-  /* Counsel: three columns, the spine in the middle, members to either side. */
-  .council-counsel {
+  /*
+   * The top tier. Narrow trees stack it: the Overseer, then the Counsel directly under him
+   * (side by side when there are two sides), each hung from a short link.
+   */
+  .council-top {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) 1px minmax(0, 1fr);
-    grid-template-rows: auto 1fr;
+    width: 100%;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    grid-template-areas: 'ocap ocap' 'over over' 'ccap ccap' 'left right';
+    justify-items: center;
+    row-gap: calc(var(--spacing) * 1);
+    column-gap: calc(var(--spacing) * 2);
   }
-  .council-counsel > .council-spine {
-    grid-column: 2;
-    grid-row: 1 / span 2;
-    height: 100%;
+  .council-top.solo {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-areas: 'ocap' 'over' 'ccap' 'right';
+  }
+  .council-top.no-counsel {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-areas: 'ocap' 'over';
+  }
+  .council-ocap {
+    grid-area: ocap;
+  }
+  .council-over {
+    grid-area: over;
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: calc(var(--spacing) * 6);
+  }
+  .council-overseer {
+    width: calc(var(--spacing) * 64);
+    max-width: 100%;
+  }
+  .council-ccap {
+    grid-area: ccap;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+  }
+  .council-right {
+    grid-area: right;
+  }
+  .council-left {
+    grid-area: left;
+  }
+  .council-hands {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: calc(var(--spacing) * 2);
+  }
+  .council-hand {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+  }
+  /* A short gilded link: vertical when stacked, horizontal at the hands. */
+  .council-hand-link {
+    width: 1px;
+    height: calc(var(--spacing) * 3);
+    background-color: color-mix(in oklab, var(--color-gold) 65%, transparent);
+  }
+
+  /*
+   * Wide trees: one row. The Overseer is centred (equal side columns); the Counsel stand at
+   * his hands, their seals level with his. Offsets follow the sm seal frames in HaloSigil
+   * (Overseer 12rem, Counsel 7rem): the hand drops 2.5rem, its link sits at 3.5rem.
+   */
+  @container council (width >= 38rem) {
+    .council-top:not(.no-counsel) {
+      grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+      grid-template-areas: '. ocap ccap' 'left over right';
+      column-gap: 0;
+      align-items: start;
+    }
+    .council-stack-only {
+      display: none;
+    }
+    .council-ccap {
+      justify-self: start;
+      padding-left: calc(var(--spacing) * 10);
+    }
+    .council-right {
+      justify-self: start;
+    }
+    .council-left {
+      justify-self: end;
+    }
+    .council-overseer {
+      width: calc(var(--spacing) * 48);
+    }
+    .council-hands {
+      flex-wrap: nowrap;
+      gap: 0;
+    }
+    .council-hands.left,
+    .council-hand.left {
+      flex-direction: row-reverse;
+    }
+    .council-hand {
+      flex-direction: row;
+      align-items: flex-start;
+      margin-top: calc(var(--spacing) * 10);
+    }
+    /* The link runs on into the hand's figure box, up to its orbit (figure 10rem, seal 7rem). */
+    .council-hand-link {
+      width: calc(var(--spacing) * 10);
+      height: 1px;
+      margin-top: calc(var(--spacing) * 14);
+      margin-inline-end: calc(var(--spacing) * -5);
+    }
+    .council-hand.left > .council-hand-link {
+      margin-inline-end: 0;
+      margin-inline-start: calc(var(--spacing) * -5);
+    }
   }
 
   /*
@@ -301,14 +408,14 @@
       flex-shrink: 1;
       min-width: 0;
       padding-inline: calc(var(--spacing) * 1);
-      padding-top: calc(var(--spacing) * 10);
+      padding-top: calc(var(--spacing) * 8);
     }
     .row-1 .council-drop {
       display: block;
       position: absolute;
       top: 0;
       left: 50%;
-      height: calc(var(--spacing) * 6);
+      height: calc(var(--spacing) * 4);
     }
     .row-1 .council-bus {
       display: block;
@@ -340,14 +447,14 @@
       flex-shrink: 1;
       min-width: 0;
       padding-inline: calc(var(--spacing) * 1);
-      padding-top: calc(var(--spacing) * 10);
+      padding-top: calc(var(--spacing) * 8);
     }
     .row-2 .council-drop {
       display: block;
       position: absolute;
       top: 0;
       left: 50%;
-      height: calc(var(--spacing) * 6);
+      height: calc(var(--spacing) * 4);
     }
     .row-2 .council-bus {
       display: block;
@@ -379,14 +486,14 @@
       flex-shrink: 1;
       min-width: 0;
       padding-inline: calc(var(--spacing) * 1);
-      padding-top: calc(var(--spacing) * 10);
+      padding-top: calc(var(--spacing) * 8);
     }
     .row-3 .council-drop {
       display: block;
       position: absolute;
       top: 0;
       left: 50%;
-      height: calc(var(--spacing) * 6);
+      height: calc(var(--spacing) * 4);
     }
     .row-3 .council-bus {
       display: block;
@@ -418,14 +525,14 @@
       flex-shrink: 1;
       min-width: 0;
       padding-inline: calc(var(--spacing) * 1);
-      padding-top: calc(var(--spacing) * 10);
+      padding-top: calc(var(--spacing) * 8);
     }
     .row-4 .council-drop {
       display: block;
       position: absolute;
       top: 0;
       left: 50%;
-      height: calc(var(--spacing) * 6);
+      height: calc(var(--spacing) * 4);
     }
     .row-4 .council-bus {
       display: block;

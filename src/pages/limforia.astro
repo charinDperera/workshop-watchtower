@@ -25,7 +25,7 @@ import {
   type FilterOption,
 } from '../ui/archive-filter';
 import { capitalise } from '../ui/format';
-import { wingTitle } from '../shared/wings';
+import { TEMPLATES_WING, wingTitle } from '../shared/wings';
 import { loadPageRecord, loadSnapshot } from '../server/handlers/page-snapshot';
 
 const { snapshot, error } = await loadSnapshot();
@@ -215,7 +215,7 @@ const recordsEyebrow = filter.wing ? `In ${wingTitle(filter.wing)}` : 'Every win
               Ignored an unknown filter: {ignored.join(', ')}.
             </p>
           )}
-          {filter.wing === 'templates' && (
+          {filter.wing === TEMPLATES_WING && (
             <p class="text-sm text-ink-muted">
               Templates are the forms new records are written from. They are not records, so the
               compliance checks pass them by.

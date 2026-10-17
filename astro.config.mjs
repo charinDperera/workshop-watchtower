@@ -26,6 +26,9 @@ export default defineConfig({
   server: { host: '127.0.0.1', port: 4321 },
   integrations: [svelte()],
   session: false,
+  // Records are rendered with marked (src/server/render/markdown.ts), never Astro markdown,
+  // so Astro's highlighter is off. Shiki's inline styles would also clash with the CSP.
+  markdown: { syntaxHighlight: false },
   security: {
     csp: {
       directives: [

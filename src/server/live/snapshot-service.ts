@@ -61,12 +61,12 @@ export class SnapshotService {
     try {
       await this.deps.tail.start();
     } catch (err) {
-      this.log.warn('events.unreadable', 'Event log not readable', { err: (err as Error).message });
+      this.log.warn('events.unreadable', 'Event log not readable', { err });
     }
     this.watcher = this.deps.watch({
       onChange: () => this.refresh(),
       onEventLog: () => void this.pollActivity(),
-      onError: (error) => this.log.error('watch.failed', 'Watcher error', { err: error.message }),
+      onError: (error) => this.log.error('watch.failed', 'Watcher error', { err: error }),
     });
   }
 
@@ -120,7 +120,7 @@ export class SnapshotService {
         for (const subscriber of this.subscribers) subscriber.onSnapshot(snapshot);
       })
       .catch((err: unknown) => {
-        this.log.error('snapshot.failed', 'Snapshot build failed', { err: (err as Error).message });
+        this.log.error('snapshot.failed', 'Snapshot build failed', { err });
       });
   }
 
@@ -134,7 +134,7 @@ export class SnapshotService {
     try {
       events = await this.deps.tail.poll();
     } catch (err) {
-      this.log.warn('events.read_failed', 'Event log read failed', { err: (err as Error).message });
+      this.log.warn('events.read_failed', 'Event log read failed', { err });
       return;
     }
     for (const event of events) {

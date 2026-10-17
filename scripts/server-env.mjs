@@ -9,7 +9,7 @@
 
 import { existsSync, readFileSync, statSync } from 'node:fs';
 import { BlockList, isIP } from 'node:net';
-import { dirname, isAbsolute, join, resolve } from 'node:path';
+import { dirname, isAbsolute, join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { z } from 'zod';
 
@@ -31,6 +31,20 @@ export const LOG_LEVELS = Object.freeze([
 /** LOG_DIR default, relative to the workstation root (ADR-005). */
 export const DEFAULT_LOG_SUBDIR = 'limforia/logs/watchtower';
 const APP_PACKAGE_NAME = 'watchtower';
+
+/** Shown when container mode finds no workstation mounted (see the README). */
+export const CONTAINER_NO_ROOT =
+  'No workstation is mounted at /workstation. Run The Watchtower with `docker compose up` from apps/watchtower (see README).';
+
+/** True when `path` is `other` or one of its ancestors (case-insensitive on Windows). */
+export function isSameOrAncestor(path, other) {
+  const norm = (p) => {
+    const r = resolve(p);
+    return process.platform === 'win32' ? r.toLowerCase() : r;
+  };
+  const rel = relative(norm(path), norm(other));
+  return rel === '' || (!rel.startsWith('..') && !isAbsolute(rel));
+}
 
 export class ServerEnvError extends Error {
   /** @param {{ variable: string, problem: string }[]} problems */
@@ -96,6 +110,31 @@ export function parseClientEntry(entry) {
 
 /** `host:port` or `[ipv6]:port`, lower-cased; `null` when invalid. */
 export function parseAllowedHost(entry) {
+  return parseHostPort(entry);
+}
+
+/**
+ * A strict public origin, e.g. `https://dev-watchtower.workshop.io` or `http://host:8080`:
+ * http or https, a host, an optional port, nothing else (no path, not even `/`, no query,
+ * fragment or credentials). Returns the normalised origin, or `null`.
+ */
+export function parsePublicOrigin(text) {
+  let url;
+  try {
+    url = new URL(text);
+  } catch {
+    return null;
+  }
+  if (url.protocol !== 'http:' && url.protocol !== 'https:') return null;
+  return text.toLowerCase() === url.origin ? url.origin : null;
+}
+
+/** The Host header value a public origin produces (`host[:port]`, default port omitted). */
+export function hostOfOrigin(origin) {
+  return new URL(origin).host;
+}
+
+function parseHostPort(entry) {
   const host = entry.toLowerCase();
   const match =
     /^(\[[0-9a-f:.]+\]|[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)*):(\d{1,5})$/.exec(
@@ -147,6 +186,19 @@ const schema = z
     WATCHTOWER_POLL_MS: optional(integer(POLL_MIN_MS, POLL_MAX_MS)),
     LOG_LEVEL: optional(z.enum(LOG_LEVELS, { error: `must be one of ${LOG_LEVELS.join(', ')}` })),
     LOG_DIR: optional(z.string()),
+    WATCHTOWER_PUBLIC_ORIGIN: optional(
+      z.string().transform((text, ctx) => {
+        const origin = parsePublicOrigin(text);
+        if (origin === null) {
+          ctx.addIssue({
+            code: 'custom',
+            message: 'must be an http or https origin with no path, e.g. https://host.example',
+          });
+          return z.NEVER;
+        }
+        return origin;
+      }),
+    ),
   })
   .superRefine((v, ctx) => {
     if (v.WATCHTOWER_TRUSTED_CLIENTS !== undefined && v.WATCHTOWER_CONTAINER !== '1') {
@@ -180,8 +232,13 @@ export function readServerEnv(env, options = {}) {
     ? resolve(process.cwd(), v.WATCHTOWER_ROOT)
     : defaultRoot(options.moduleUrl);
   if (!isDirectory(root)) {
+    // In a container the root is a mount: say how to provide it (Docker Desktop's Run
+    // button cannot add the mount). Names the documented mount point, never the value.
     throw new ServerEnvError([
-      { variable: 'WATCHTOWER_ROOT', problem: 'is not an existing directory' },
+      {
+        variable: 'WATCHTOWER_ROOT',
+        problem: container ? CONTAINER_NO_ROOT : 'is not an existing directory',
+      },
     ]);
   }
   const logDir = v.LOG_DIR
@@ -189,6 +246,12 @@ export function readServerEnv(env, options = {}) {
       ? v.LOG_DIR
       : resolve(process.cwd(), v.LOG_DIR)
     : join(root, ...DEFAULT_LOG_SUBDIR.split('/'));
+  if (isSameOrAncestor(logDir, root)) {
+    // Logs written there would land among (or above) the records the app reads.
+    throw new ServerEnvError([
+      { variable: 'LOG_DIR', problem: 'must not be the workstation root or a folder above it' },
+    ]);
+  }
 
   return Object.freeze({
     nodeEnv: v.NODE_ENV ?? 'development',
@@ -202,6 +265,7 @@ export function readServerEnv(env, options = {}) {
     pollMs: v.WATCHTOWER_POLL_MS ?? null,
     logLevel: v.LOG_LEVEL ?? 'info',
     logDir,
+    publicOrigin: v.WATCHTOWER_PUBLIC_ORIGIN ?? null,
   });
 }
 
@@ -219,6 +283,8 @@ export function summariseServerEnv(settings) {
     extraAllowedHosts: settings.allowedHosts.length,
     watch: settings.pollMs === null ? 'fs.watch' : `poll ${settings.pollMs} ms`,
     logLevel: settings.logLevel,
+    // Not a secret: the address users open (behind the workstation gateway).
+    publicOrigin: settings.publicOrigin,
   };
 }
 

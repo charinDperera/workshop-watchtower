@@ -2,11 +2,17 @@ import { appendFileSync, renameSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { ActivityEvent, Snapshot } from '../../src/shared/types';
-import { EventTail } from '../../src/server/live/event-tail';
+import { EventTail, MAX_READ_BYTES } from '../../src/server/live/event-tail';
 import { isEventLogChange, isIgnoredChange } from '../../src/server/live/watch-filter';
 import { debounce, watchWorkstation } from '../../src/server/live/watcher';
 import { SnapshotService, type ServiceDeps } from '../../src/server/live/snapshot-service';
-import { createEventStream, formatSseEvent, SSE_PING } from '../../src/server/live/sse';
+import {
+  createEventStream,
+  formatSseEvent,
+  MAX_QUEUED_CHUNKS,
+  SSE_PING,
+  STREAM_HIGH_WATER,
+} from '../../src/server/live/sse';
 import { defaultRoot, readServerEnv } from '../../scripts/server-env.mjs';
 import { APP_DIR, FIXTURE, makeTempDir } from './helpers';
 
@@ -80,6 +86,23 @@ describe('workstation watcher (real fs.watch)', () => {
 });
 
 describe('event tail', () => {
+  it('drains a backlog larger than one read chunk in one poll', async () => {
+    const temp = makeTempDir('tail-big-');
+    const file = join(temp.dir, 'events.jsonl');
+    try {
+      writeFileSync(file, '');
+      const tail = new EventTail(file);
+      await tail.start();
+      const one = line('PreToolUse');
+      const count = Math.ceil((MAX_READ_BYTES * 2.5) / one.length);
+      appendFileSync(file, one.repeat(count));
+      expect((await tail.poll()).length).toBe(count);
+      expect(await tail.poll()).toEqual([]);
+    } finally {
+      temp.cleanup();
+    }
+  });
+
   it('reports only appended, complete lines and survives rotation', async () => {
     const temp = makeTempDir('tail-');
     const file = join(temp.dir, 'events.jsonl');
@@ -250,6 +273,41 @@ describe('SSE stream', () => {
     }
     return text;
   }
+
+  it('honours backpressure: a slow client gets only the newest snapshot, and bounded events', async () => {
+    const src = source(fakeSnapshot(0));
+    const stream = createEventStream(src, new AbortController().signal, 60_000);
+    // Nobody reads yet: wait for the stream to start (retry + first snapshot are queued).
+    await new Promise((r) => setTimeout(r, 10));
+    const [subscriber] = [...src.subs];
+    for (let n = 1; n <= 50; n += 1) subscriber?.onSnapshot(fakeSnapshot(n));
+    for (let n = 0; n < 100; n += 1) {
+      subscriber?.onActivity({
+        ts: `2026-10-17T00:00:${String(n % 60).padStart(2, '0')}Z`,
+      } as ActivityEvent);
+    }
+    const reader = stream.getReader();
+    const decoder = new TextDecoder();
+    const chunks: string[] = [];
+    // Read everything queued, plus the held-back snapshot that reading releases.
+    for (;;) {
+      const next = await Promise.race([
+        reader.read(),
+        new Promise<null>((r) => setTimeout(() => r(null), 50)),
+      ]);
+      if (next === null || next.done) break;
+      chunks.push(decoder.decode(next.value));
+    }
+    const snapshots = chunks.filter((c) => c.startsWith('event: snapshot'));
+    const activity = chunks.filter((c) => c.startsWith('event: activity'));
+    // Far fewer than the 51 snapshots sent, and the last one delivered is the newest.
+    expect(snapshots.length).toBeLessThanOrEqual(STREAM_HIGH_WATER + 1);
+    expect(snapshots.at(-1)).toContain('"rootName":"r50"');
+    // Events beyond the cap were dropped instead of buffered without bound.
+    expect(chunks.length).toBeLessThanOrEqual(MAX_QUEUED_CHUNKS + 1);
+    expect(activity.length).toBeLessThan(100);
+    await reader.cancel();
+  });
 
   it('formats events', () => {
     expect(formatSseEvent('x', { a: 'b\nc' })).toBe('event: x\ndata: {"a":"b\\nc"}\n\n');

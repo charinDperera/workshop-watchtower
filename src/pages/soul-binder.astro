@@ -10,7 +10,7 @@ import Panel from '../components/Panel.astro';
 import Starfield from '../components/Starfield.astro';
 import LiveSoulBinder from '../components/live/LiveSoulBinder.svelte';
 import Shell from '../layouts/Shell.astro';
-import { PATHS } from '../server/constants';
+import { PATHS, wingIdOf } from '../server/constants';
 import { recordHref } from '../ui/labels';
 import { loadSnapshot } from '../server/handlers/page-snapshot';
 
@@ -70,10 +70,10 @@ if (!snapshot) Astro.response.status = 503;
           <a href={recordHref(PATHS.soulBinder)}>Open the Soul Binder itself</a>
         </li>
         <li>
-          <a href="/limforia?wing=audit-hall">The Audit Hall</a>
+          <a href={`/limforia?wing=${wingIdOf(PATHS.auditHall)}`}>The Audit Hall</a>
         </li>
         <li>
-          <a href="/limforia?wing=reliquary">The Reliquary</a>
+          <a href={`/limforia?wing=${wingIdOf(PATHS.reliquary)}`}>The Reliquary</a>
         </li>
         <li>
           <a href="/host">The Council</a>

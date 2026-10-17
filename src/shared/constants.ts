@@ -1,7 +1,10 @@
 /** Constants the client needs too. No Node imports: this module is bundled for the browser. */
-import type { RecordStatus, RecordType } from './types';
-
-export const RECORD_TYPES: readonly RecordType[] = [
+/**
+ * The record types of the Constitution's record header (CLAUDE.md, Commandment 5), in its
+ * order. `RecordType` derives from this list, and a unit test checks it against the real
+ * CLAUDE.md, so an amendment cannot drift silently.
+ */
+export const RECORD_TYPES = [
   'chronicle',
   'audit',
   'decision',
@@ -11,11 +14,8 @@ export const RECORD_TYPES: readonly RecordType[] = [
   'intel',
   'idea',
   'reliquary',
-];
+  'checkpoint',
+] as const;
 
-export const RECORD_STATUSES: readonly RecordStatus[] = [
-  'open',
-  'closed',
-  'accepted',
-  'superseded',
-];
+/** The record statuses of the same header, in its order (checked the same way). */
+export const RECORD_STATUSES = ['open', 'closed', 'accepted', 'superseded'] as const;

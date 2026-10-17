@@ -29,10 +29,15 @@ export interface ServerEnv {
   readonly pollMs: number | null;
   readonly logLevel: LogLevel;
   readonly logDir: string;
+  /** WATCHTOWER_PUBLIC_ORIGIN: the gateway's origin (e.g. https://dev-watchtower.workshop.io). */
+  readonly publicOrigin: string | null;
 }
 
 /** Kept for the guard's signature: the policy needs these fields of the config. */
-export type ServerSettings = Pick<ServerEnv, 'container' | 'trustedClients' | 'allowedHosts'>;
+export type ServerSettings = Pick<
+  ServerEnv,
+  'container' | 'trustedClients' | 'allowedHosts' | 'publicOrigin'
+>;
 
 export type LoadedEnv =
   { ok: true; env: ServerEnv } | { ok: false; error: string; variables: readonly string[] };

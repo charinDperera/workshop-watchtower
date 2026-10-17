@@ -11,30 +11,35 @@ import pino from 'pino';
 
 export const APP_NAME = 'watchtower';
 
-/** Never logged: credentials and anything token-like, wherever they appear (two levels). */
-export const REDACT_PATHS = Object.freeze([
+/** Field names that are never logged: credentials and anything token-like. */
+export const SENSITIVE_KEYS = Object.freeze([
   'authorization',
   'cookie',
   'set-cookie',
+  'x-api-key',
   'token',
+  'accessToken',
+  'access_token',
+  'refreshToken',
+  'refresh_token',
   'password',
   'secret',
   'apiKey',
-  '*.authorization',
-  '*.cookie',
-  '*["set-cookie"]',
-  '*.token',
-  '*.password',
-  '*.secret',
-  '*.apiKey',
-  '*.*.authorization',
-  '*.*.cookie',
-  '*.*["set-cookie"]',
-  '*.*.token',
-  '*.*.password',
-  '*.*.secret',
-  '*.*.apiKey',
+  'api_key',
 ]);
+
+/** The key as a pino redaction path segment (bracket form when it is not an identifier). */
+const segment = (key) => (/^[A-Za-z_$][\w$]*$/.test(key) ? `.${key}` : `["${key}"]`);
+
+/**
+ * Redaction paths for every sensitive key at the top level and up to three levels down
+ * (pino's redaction has no "any depth" wildcard; three covers `req.headers.x`).
+ */
+export const REDACT_PATHS = Object.freeze(
+  SENSITIVE_KEYS.flatMap((key) =>
+    ['', '*', '*.*', '*.*.*'].map((prefix) => `${prefix}${segment(key)}`.replace(/^\./, '')),
+  ),
+);
 
 /** Appends lines to `<dir>/YYYY-MM-DD.jsonl`, switching file when the UTC day changes. */
 export class DailyFile {
@@ -56,7 +61,14 @@ export class DailyFile {
       this.ready = true;
     }
     // Synchronous and small: a line is never lost on a crash, and never interleaved.
-    appendFileSync(this.path(), line);
+    try {
+      appendFileSync(this.path(), line);
+    } catch (err) {
+      // The folder was removed while running (log retention, a cleanup): make it again, once.
+      if (err?.code !== 'ENOENT') throw err;
+      mkdirSync(this.dir, { recursive: true });
+      appendFileSync(this.path(), line);
+    }
     return true;
   }
 }
@@ -106,7 +118,8 @@ function wrap(base) {
  *   stdout (tests capture lines this way).
  */
 export function createLogger({ service, env, level, logDir = null, sinks }) {
-  const outputs = sinks ?? [process.stdout];
+  // A copy: the caller's array is never changed.
+  const outputs = [...(sinks ?? [process.stdout])];
   if (logDir) outputs.push(new DailyFile(join(logDir, service)));
   const base = pino(
     {

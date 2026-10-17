@@ -2,7 +2,7 @@
  * Theme toggle persistence, 360 px layout without horizontal overflow, reduced motion, and
  * rendering with JavaScript disabled.
  */
-import { councilMember, expect, OWN_STATUS, PAGES, test, waitForLive } from './support/test';
+import { atWorkPanel, expect, OWN_STATUS, PAGES, test, waitForLive } from './support/test';
 
 test.describe('theme toggle', () => {
   test('switches theme, persists across reloads and navigation, and labels itself', async ({
@@ -128,7 +128,9 @@ test.describe('JavaScript disabled', () => {
 
   test('overview shows the agents and the archive without JavaScript', async ({ page }) => {
     await page.goto('/');
-    await expect(councilMember(page, 'Paul')).toBeVisible();
+    const atWork = atWorkPanel(page);
+    await expect(atWork.getByText(/The Council rests/)).toBeVisible();
+    await expect(atWork.getByRole('listitem').first().getByRole('link')).toBeVisible();
     await expect(page.getByText('Chronicles').first()).toBeVisible();
   });
 

@@ -22,3 +22,11 @@ export function wingTitle(id: string): string {
 export function isWingId(value: string): boolean {
   return /^[a-z0-9][a-z0-9_-]{0,63}$/i.test(value);
 }
+
+/**
+ * The archive's templates folder (workstation-relative) and its wing id, derived the same
+ * way the server derives wing ids (`wingIdOf`: the segment after `limforia/`). Client code
+ * compares against `TEMPLATES_WING`, never a literal.
+ */
+export const TEMPLATES_DIR = 'limforia/templates';
+export const TEMPLATES_WING: string = TEMPLATES_DIR.split('/')[1] ?? TEMPLATES_DIR;

@@ -3,7 +3,7 @@
  * (wcag2a, wcag2aa, wcag21aa, wcag22aa) in both the dark and the light theme.
  */
 import {
-  councilMember,
+  atWorkPanel,
   expect,
   expectNoAxeViolations,
   OWN_STATUS,
@@ -32,30 +32,71 @@ for (const { path, h1, status = 200 } of PAGES) {
 }
 
 test.describe('overview content', () => {
-  test('shows The Council, the Order of Work, the archive, the laws and activity', async ({
-    page,
-  }) => {
+  test('shows At work, the Order of Work, the archive, the laws and activity', async ({ page }) => {
     await page.goto('/');
     await waitForLive(page);
     for (const name of [
-      'The Council',
+      'At work',
       'The Order of Work',
       'The Great Archive',
       'Activity',
       'The Laws',
       'Latest commits',
     ]) {
-      // Panel headings; the tree's tiers (h3) repeat "The Order of Work" by design.
       await expect(page.getByRole('heading', { name, exact: true, level: 2 })).toBeVisible();
     }
-    // Every fixture agent is idle: the fixture's events are weeks old.
-    const paul = councilMember(page, 'Paul');
-    await expect(paul).toBeVisible();
-    await expect(paul.getByText('Idle', { exact: true })).toBeVisible();
+    // Every fixture agent is idle (the events are weeks old): The Council rests, and the most
+    // recently seen are listed under "Last active", at most four, with a link to the tree.
+    const atWork = atWorkPanel(page);
+    await expect(atWork.getByText(/The Council rests/)).toBeVisible();
+    await expect(atWork.getByRole('region', { name: /^At work now/ })).toHaveCount(0);
+    const recent = atWork.getByRole('region', { name: 'Last active' }).getByRole('listitem');
+    expect(await recent.count()).toBeGreaterThan(0);
+    expect(await recent.count()).toBeLessThanOrEqual(4);
+    await expect(recent.first().getByText(/^Last seen/)).toBeVisible();
+    await expect(atWork.getByRole('link', { name: /See the whole Council/ })).toHaveAttribute(
+      'href',
+      '/host',
+    );
+    // The whole tree is not on the Overview.
+    await expect(page.locator('.council')).toHaveCount(0);
     for (const stage of ['Build', 'Test', 'Review']) {
       await expect(page.getByText(stage, { exact: true }).first()).toBeVisible();
     }
     await expect(page.getByText('In progress', { exact: true })).toHaveCount(0);
+  });
+});
+
+test.describe('the Council tree on /host', () => {
+  test('the Counsel stand at the hands of the Overseer, with no empty seat', async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.goto('/host');
+    const rightHand = page.getByRole('list', { name: 'The Counsel, at the right hand' });
+    await expect(rightHand.getByRole('link', { name: 'Uriel', exact: true })).toBeVisible();
+    // One counsel today: nothing is drawn at the left hand.
+    await expect(page.getByRole('list', { name: 'The Counsel, at the left hand' })).toHaveCount(0);
+    // At 1440 the hand's seal is level with the Overseer's, to his right, and he stays centred.
+    const seal = (name: string) =>
+      page
+        .locator('.council li')
+        .filter({ has: page.getByRole('link', { name, exact: true }) })
+        .last()
+        .locator('[data-rank]')
+        .first()
+        .boundingBox();
+    const [overseer, hand, tree] = await Promise.all([
+      seal('Michael'),
+      seal('Uriel'),
+      page.locator('.council').boundingBox(),
+    ]);
+    if (!overseer || !hand || !tree) throw new Error('the tree did not render');
+    const centreY = (b: { y: number; height: number }) => b.y + b.height / 2;
+    const centreX = (b: { x: number; width: number }) => b.x + b.width / 2;
+    expect(Math.abs(centreY(hand) - centreY(overseer))).toBeLessThanOrEqual(2);
+    expect(centreX(hand)).toBeGreaterThan(centreX(overseer));
+    expect(Math.abs(centreX(overseer) - centreX(tree))).toBeLessThanOrEqual(2);
+    // The Overseer, the Counsel and the station niches fit in one 900 px view.
+    expect(tree.height).toBeLessThanOrEqual(900);
   });
 });
 

@@ -93,7 +93,7 @@ export function getRuntime(): Runtime {
     });
     runtime.service.start().catch((err: unknown) => {
       systemLog().error('live.start_failed', 'Live updates failed to start', {
-        err: (err as Error).message,
+        err,
       });
     });
   }
