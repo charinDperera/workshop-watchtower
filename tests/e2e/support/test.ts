@@ -28,6 +28,11 @@ export const OWN_STATUS = (status: number) =>
 interface Fixtures {
   /** Console errors matching one of these are expected for this test. */
   allowConsoleErrors: (pattern: RegExp) => void;
+  /**
+   * Every Content-Security-Policy violation the page reported (all browsers, every document
+   * of the test). Any violation fails the test; a test may read the list to assert on it.
+   */
+  cspViolations: string[];
 }
 
 export const test = base.extend<Fixtures>({
@@ -44,6 +49,28 @@ export const test = base.extend<Fixtures>({
       });
       const unexpected = errors.filter((text) => !allowed.some((p) => p.test(text)));
       expect(unexpected, 'unexpected browser console errors').toEqual([]);
+    },
+    { auto: true },
+  ],
+  cspViolations: [
+    async ({ page }, use) => {
+      const violations: string[] = [];
+      // A binding survives navigations; the listener is installed in every new document.
+      // Without JavaScript nothing runs, and a page without scripts cannot be blocked from one.
+      await page.exposeBinding('__wtCspViolation', (_source, text: string) => {
+        violations.push(text);
+      });
+      await page.addInitScript(() => {
+        document.addEventListener('securitypolicyviolation', (e) => {
+          const report = (window as unknown as { __wtCspViolation?: (t: string) => void })
+            .__wtCspViolation;
+          report?.(
+            `${e.effectiveDirective} blocked ${e.blockedURI || 'inline'} on ${location.pathname}`,
+          );
+        });
+      });
+      await use(violations);
+      expect(violations, 'Content-Security-Policy violations').toEqual([]);
     },
     { auto: true },
   ],

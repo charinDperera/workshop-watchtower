@@ -36,11 +36,18 @@ async function focusIndicator(
 }
 
 test.describe('keyboard', () => {
-  test('the first Tab reaches a visible skip link that moves focus to main', async ({ page }) => {
+  test('the first Tab reaches a visible skip link that moves focus to main', async ({
+    page,
+    browserName,
+  }) => {
     await page.goto('/');
     await waitForLive(page);
-    await page.keyboard.press('Tab');
     const skip = page.getByRole('link', { name: 'Skip to content' });
+    // WebKit, like Safari by default, tabs only through form controls, never to links (measured:
+    // Tab and Alt+Tab both skip every link). There the link is focused directly, and the rest
+    // of the test (visible when focused, Enter moves focus to main) still runs.
+    if (browserName === 'webkit') await skip.focus();
+    else await page.keyboard.press('Tab');
     await expect(skip).toBeFocused();
     const box = await skip.boundingBox();
     expect(box && box.width > 1 && box.height > 1, 'skip link is visible when focused').toBe(true);
@@ -53,8 +60,10 @@ test.describe('keyboard', () => {
     page,
     browserName,
   }) => {
-    // WebKit only tabs to links when "Press Tab to highlight each item" is on; Playwright's
-    // WebKit enables it, but keep the assertion on what the user can reach.
+    test.skip(
+      browserName === 'webkit',
+      'WebKit tabs only through form controls (Safari default); links are not in its Tab order',
+    );
     await page.goto('/');
     await waitForLive(page);
     const seen: string[] = [];
@@ -103,8 +112,8 @@ test.describe('keyboard', () => {
   test('filters and paging work from the keyboard alone', async ({ page }) => {
     await page.goto('/activity');
     await waitForLive(page);
-    await page.getByLabel('Agent').focus();
-    await page.getByLabel('Agent').selectOption('uriel');
+    await page.getByLabel('Agent', { exact: true }).focus();
+    await page.getByLabel('Agent', { exact: true }).selectOption('uriel');
     await page.getByRole('button', { name: 'Apply filters' }).focus();
     await page.keyboard.press('Enter');
     await expect(page).toHaveURL(/agent=uriel/);

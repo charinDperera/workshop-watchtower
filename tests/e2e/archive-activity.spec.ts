@@ -70,7 +70,10 @@ test.describe('/limforia', () => {
     await expect(viewer.getByRole('heading', { level: 2 })).toBeVisible();
     await expect(viewer).toContainText('This record has no header.');
     // The fixture plants a script and a javascript: link; neither may become live.
-    expect(await viewer.locator('script, iframe, img, svg').count()).toBe(0);
+    // Only the record body (.prose) is sanitised content; the viewer's own icons are SVG.
+    expect(
+      await viewer.locator('.prose').locator('script, iframe, img, svg, object, embed').count(),
+    ).toBe(0);
     for (const href of await viewer
       .locator('a[href]')
       .evaluateAll((as) => as.map((a) => a.getAttribute('href') ?? ''))) {
@@ -181,7 +184,7 @@ test.describe('/activity', () => {
     const older = page.getByRole('list', { name: 'Older activity' });
     await expect(older.locator(':scope > li')).toHaveCount(Math.min(50, all.total - 50));
     if (all.total <= 100) await expect(page.getByText('This is the oldest page.')).toBeVisible();
-    await page.getByRole('link', { name: 'Newest events' }).click();
+    await page.getByRole('link', { name: 'Newest events', exact: true }).click();
     await expect(page).toHaveURL(/\/activity$/);
   });
 
@@ -189,7 +192,7 @@ test.describe('/activity', () => {
     const uriel = await apiPage(request, `?agent=${SEEDED_AGENT}`);
     expect(uriel.total).toBeGreaterThanOrEqual(SEEDED_EVENTS);
     await page.goto('/activity');
-    await page.getByLabel('Agent').selectOption(SEEDED_AGENT);
+    await page.getByLabel('Agent', { exact: true }).selectOption(SEEDED_AGENT);
     await page.getByRole('button', { name: 'Apply filters' }).click();
     await expect(page).toHaveURL(new RegExp(`agent=${SEEDED_AGENT}`));
     await expect(
@@ -198,7 +201,7 @@ test.describe('/activity', () => {
 
     const starts = await apiPage(request, '?event=SessionStart');
     await page.goto('/activity');
-    await page.getByLabel('Event').selectOption('SessionStart');
+    await page.getByLabel('Event', { exact: true }).selectOption('SessionStart');
     await page.getByRole('button', { name: 'Apply filters' }).click();
     const timeline = page.getByRole('list', { name: 'Activity timeline' });
     await expect(timeline.locator(':scope > li')).toHaveCount(starts.total);
@@ -220,15 +223,27 @@ test.describe('unattributed subagent events', () => {
   test('show as "Unnamed subagent" without a /host link, on the overview and the timeline', async ({
     page,
   }) => {
-    for (const path of ['/', '/activity']) {
+    for (const [path, feed] of [
+      ['/', 'Latest activity'],
+      ['/activity', 'Activity timeline'],
+    ] as const) {
       await page.goto(path);
       await waitForLive(page);
-      await expect(page.getByText('Unnamed subagent', { exact: true })).toHaveCount(
+      // Scoped to the feed: /activity also offers "Unnamed subagent" in its agent filter.
+      const list = page.getByRole('list', { name: feed });
+      await expect(list.getByText('Unnamed subagent', { exact: true })).toHaveCount(
         UNATTRIBUTED_EVENTS.length,
       );
       await expect(page.locator('a[href="/host/subagent"]')).toHaveCount(0);
       await expect(page.getByRole('link', { name: 'Unnamed subagent' })).toHaveCount(0);
     }
+    // The filter option is labelled the same way and filters to the unattributed events.
+    await page.getByLabel('Agent', { exact: true }).selectOption({ label: 'Unnamed subagent' });
+    await page.getByRole('button', { name: 'Apply filters' }).click();
+    await expect(page).toHaveURL(/agent=subagent/);
+    await expect(
+      page.getByRole('list', { name: 'Activity timeline' }).locator(':scope > li'),
+    ).toHaveCount(UNATTRIBUTED_EVENTS.length);
   });
 
   test('do not count toward Michael', async ({ request }) => {

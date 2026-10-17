@@ -109,12 +109,17 @@ test.describe('JavaScript disabled', () => {
   test.use({ javaScriptEnabled: false });
 
   for (const { path, h1, status = 200 } of PAGES) {
-    test(`${path} renders its content server-side`, async ({ page }) => {
+    test(`${path} renders its content server-side`, async ({ page, allowConsoleErrors }) => {
+      if (status !== 200) allowConsoleErrors(OWN_STATUS(status));
       const response = await page.goto(path);
       expect(response?.status()).toBe(status);
       await expect(page.locator('h1')).toHaveText(h1);
       await expect(page.locator('html')).toHaveClass(/no-js/);
-      await expect(page.getByText('Static snapshot')).toBeVisible();
+      // The note lives in <noscript>. With JavaScript off it renders (checked in all three
+      // browsers), but Playwright's getByText skips <noscript> content, so locate it by CSS.
+      const note = page.locator('noscript > p');
+      await expect(note).toBeVisible();
+      await expect(note).toHaveText('Static snapshot');
       // JS-only controls are hidden, and nothing is stuck on a loading placeholder.
       await expect(page.locator('[data-theme-toggle]')).toBeHidden();
       await expect(page.getByText(/^Loading /)).toHaveCount(0);

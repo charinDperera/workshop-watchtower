@@ -142,3 +142,43 @@ test.describe('unknown routes', () => {
     await expect(page).toHaveURL(/\/$/);
   });
 });
+
+test.describe('wording', () => {
+  // Commandments are named on /laws only; everywhere else the UI speaks plainly.
+  for (const { path, status } of PAGES.filter((p) => p.path !== '/laws')) {
+    test(`no "Commandment" text on ${path}`, async ({ page, allowConsoleErrors }) => {
+      if (status) allowConsoleErrors(OWN_STATUS(status));
+      await page.goto(path);
+      await waitForLive(page);
+      const text = await page.locator('body').innerText();
+      expect(text).not.toMatch(/commandment/i);
+    });
+  }
+
+  test('/laws names the commandments beside its checks', async ({ page }) => {
+    await page.goto('/laws');
+    await expect(page.locator('main')).toContainText(/Commandment \d/);
+  });
+});
+
+test.describe('Content-Security-Policy', () => {
+  test('no page reports a CSP violation, fonts and styles included', async ({
+    page,
+    cspViolations,
+    allowConsoleErrors,
+  }) => {
+    allowConsoleErrors(OWN_STATUS(404));
+    for (const { path } of PAGES) {
+      const response = await page.goto(path);
+      expect(response?.headers()['content-security-policy'], path).toBeTruthy();
+      await waitForLive(page);
+      // Fonts load lazily: wait until the document's fonts are settled.
+      await page.evaluate(() => document.fonts.ready.then(() => undefined));
+      const fonts = await page.evaluate(() =>
+        [...document.fonts].filter((f) => f.status === 'loaded').map((f) => f.family),
+      );
+      expect(fonts.length, `fonts loaded on ${path}`).toBeGreaterThan(0);
+      expect(cspViolations, `CSP violations on ${path}`).toEqual([]);
+    }
+  });
+});

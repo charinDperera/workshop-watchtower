@@ -1,5 +1,10 @@
 import { defineConfig, devices } from '@playwright/test';
-import { E2E_HOST, E2E_LOG_DIR, E2E_PORT, prepareWorkstation } from './tests/e2e/support/workstation';
+import {
+  E2E_HOST,
+  E2E_LOG_DIR,
+  E2E_PORT,
+  prepareWorkstation,
+} from './tests/e2e/support/workstation';
 
 // End-to-end tests are Peter's.
 //

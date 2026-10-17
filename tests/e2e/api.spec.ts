@@ -59,7 +59,9 @@ function raw(path: string, options: RawOptions = {}): Promise<RawResponse> {
         let text = '';
         res.setEncoding('utf8');
         res.on('data', (c) => (text += c));
-        res.on('end', () => resolve({ status: res.statusCode ?? 0, headers: res.headers, body: text }));
+        res.on('end', () =>
+          resolve({ status: res.statusCode ?? 0, headers: res.headers, body: text }),
+        );
       },
     );
     req.setTimeout(10_000, () => req.destroy(new Error(`timeout on ${path}`)));
@@ -191,22 +193,27 @@ test.describe('security headers, CSP and request ids', () => {
     for (const [name, value] of Object.entries(EXPECTED_HEADERS)) {
       expect(res.headers[name], name).toBe(value);
     }
-    expect(parseCsp(res.headers['content-security-policy']).get('default-src')).toEqual([
-      "'none'",
-    ]);
+    expect(parseCsp(res.headers['content-security-policy']).get('default-src')).toEqual(["'none'"]);
     expect(String(res.headers['x-request-id'] ?? '')).not.toBe('');
   });
 
   test('every response gets its own request id', async () => {
     const ids = new Set<string>();
-    for (let i = 0; i < 5; i++) ids.add(String((await rawGet('/api/health')).headers['x-request-id']));
+    for (let i = 0; i < 5; i++)
+      ids.add(String((await rawGet('/api/health')).headers['x-request-id']));
     expect(ids.size).toBe(5);
   });
 
   test('a well-formed incoming x-request-id is kept, a malformed one replaced', async () => {
     const kept = await raw('/api/health', { headers: { 'x-request-id': 'peter-req-12345678' } });
     expect(kept.headers['x-request-id']).toBe('peter-req-12345678');
-    for (const bad of ['short', 'has space in it', 'x'.repeat(65), 'bad"quote<id>', 'line\\nbreak123']) {
+    for (const bad of [
+      'short',
+      'has space in it',
+      'x'.repeat(65),
+      'bad"quote<id>',
+      'line\\nbreak123',
+    ]) {
       const res = await raw('/api/health', { headers: { 'x-request-id': bad } });
       expect(res.headers['x-request-id']).not.toBe(bad);
       expect(String(res.headers['x-request-id'])).toMatch(/^[A-Za-z0-9_-]{8,64}$/);
@@ -430,7 +437,12 @@ test.describe('/api/client-errors', () => {
     expect(chunked.status).toBe(413);
   });
 
-  for (const type of ['text/plain', 'application/x-www-form-urlencoded', 'multipart/form-data', '']) {
+  for (const type of [
+    'text/plain',
+    'application/x-www-form-urlencoded',
+    'multipart/form-data',
+    '',
+  ]) {
     test(`content type "${type}" is refused with 415`, async () => {
       const res = await postReport(JSON.stringify(report(4)), { 'content-type': type });
       expect(res.status).toBe(415);
@@ -514,9 +526,15 @@ test.describe('request log (LOG_DIR)', () => {
     const id = 'peter-log-probe-0002';
     await raw('/', { host: `evil.test:${E2E_PORT}`, headers: { 'x-request-id': id } });
     await expect
-      .poll(() => logLines('bff').filter((l) => l.requestId === id).map((l) => l.event), {
-        timeout: 5_000,
-      })
+      .poll(
+        () =>
+          logLines('bff')
+            .filter((l) => l.requestId === id)
+            .map((l) => l.event),
+        {
+          timeout: 5_000,
+        },
+      )
       .toEqual(expect.arrayContaining(['request.refused', 'request.completed']));
   });
 
@@ -532,7 +550,13 @@ test.describe('request log (LOG_DIR)', () => {
 /* ------------------------------------------------------------------ */
 
 test.describe('unknown API routes', () => {
-  for (const path of ['/api/nope', '/api/', '/api/record/extra', '/api/../api/x', '/api/snapshot/x']) {
+  for (const path of [
+    '/api/nope',
+    '/api/',
+    '/api/record/extra',
+    '/api/../api/x',
+    '/api/snapshot/x',
+  ]) {
     test(`${path} is a JSON 404`, async () => {
       const res = await rawGet(path);
       expect(res.status).toBe(404);

@@ -4,7 +4,7 @@
  * Every test restores what it wrote and waits for the server to settle, so other specs never
  * see these writes (the suite runs with one worker).
  */
-import { readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { APIRequestContext } from '@playwright/test';
 import type { Snapshot } from '../../src/shared/types';
@@ -24,6 +24,11 @@ const SOUL_BINDER = join(root, 'hueco-mundo', 'soul-binder', 'SOUL-BINDER.md');
 const NEW_RECORD = join(root, 'limforia', 'chronicles', '2026-10-17-live-e2e.md');
 const NEW_RECORD_TITLE = 'Chronicle: written while the page was open';
 const VIEWED = join(root, 'limforia', 'chronicles', '2026-10-01-first.md');
+const ROSTER = join(root, 'ROSTER.md');
+/** A wing that is not in the fixture (nor in the CLAUDE.md wing table): a new folder. */
+const NEW_WING_DIR = join(root, 'limforia', 'vigil-notes');
+const NEW_WING_TITLE = 'Vigil Notes';
+const SILENCE_MS = 5 * 60_000;
 
 test.skip(
   !isDisposable(root),
@@ -41,24 +46,28 @@ async function settle(request: APIRequestContext, ok: (s: Snapshot) => boolean, 
     .toBe(true);
 }
 
-let restore: Record<'events' | 'soulBinder' | 'newRecord' | 'viewed', () => void>;
+let restore: Record<'events' | 'soulBinder' | 'newRecord' | 'viewed' | 'roster', () => void>;
 test.beforeEach(() => {
   restore = {
     events: preserve(EVENTS),
     soulBinder: preserve(SOUL_BINDER),
     newRecord: preserve(NEW_RECORD),
     viewed: preserve(VIEWED),
+    roster: preserve(ROSTER),
   };
 });
 test.afterEach(async ({ request }) => {
   for (const put of Object.values(restore)) put();
   rmSync(NEW_RECORD, { force: true });
+  rmSync(NEW_WING_DIR, { recursive: true, force: true });
   await settle(
     request,
     (s) =>
       s.agents.every((a) => a.status !== 'active') &&
       s.retired.length === 1 &&
-      !s.records.some((r) => r.path.endsWith('2026-10-17-live-e2e.md')),
+      !s.records.some((r) => r.path.endsWith('2026-10-17-live-e2e.md')) &&
+      !s.wings.some((w) => w.id === 'vigil-notes') &&
+      !s.agents.some((a) => ['raguel', 'sariel', 'phanuel'].includes(a.slug)),
     'the workstation is back to the fixture state',
   );
 });
@@ -169,12 +178,25 @@ test('new activity appears at the top of the timeline, without a reload', async 
   await noReload();
 });
 
-test('the open record refreshes when its file changes, without a reload', async ({ page }) => {
+test('the open record refreshes when its file changes, without a reload', async ({
+  page,
+  request,
+}) => {
   await page.goto('/limforia?record=limforia%2Fchronicles%2F2026-10-01-first.md');
   await waitForLive(page);
   const noReload = await markNoReload(page);
   const viewer = page.getByRole('region', { name: 'Record viewer' });
   writeFileSync(VIEWED, `${readFileSync(VIEWED, 'utf8')}\n\nLIVE-EDIT-MARKER\n`);
+  // The server reads the new text at once; what is under test is that the page is told.
+  await expect
+    .poll(async () =>
+      (
+        await (
+          await request.get('/api/record?path=limforia%2Fchronicles%2F2026-10-01-first.md')
+        ).text()
+      ).includes('LIVE-EDIT-MARKER'),
+    )
+    .toBe(true);
   await expect(viewer).toContainText('LIVE-EDIT-MARKER', { timeout: 15_000 });
   await noReload();
 });
@@ -206,4 +228,129 @@ test('the Soul Binder: empty state, then an entry appears live', async ({ page, 
     timeout: 15_000,
   });
   await noReload();
+});
+
+test('Active lapses to Idle after 5 minutes of silence, without a reload', async ({ page }) => {
+  // A run last heard from 4 min 54 s ago: Active now, and due to lapse in about 6 s. The
+  // server's validUntil timer must rebuild the snapshot then and push it; no clock is faked.
+  const heard = new Date(Date.now() - SILENCE_MS + 6_000).toISOString();
+  appendEvents(root, [
+    { ts: heard, event: 'SubagentStart', session: 'quiet', agent: 'peter', agentId: 'agent-quiet' },
+  ]);
+  await page.goto('/');
+  await waitForLive(page);
+  const noReload = await markNoReload(page);
+  const peter = councilMember(page, 'Peter');
+  await expect(peter.getByText('Active', { exact: true })).toBeVisible({ timeout: 5_000 });
+  await expect(peter.getByText('Active', { exact: true })).toHaveCount(0, { timeout: 20_000 });
+  // The run was never closed, so it lapsed (abandoned): the line says so instead of "Idle".
+  await expect(peter.getByText('Went quiet')).toBeVisible();
+  await expect(page.getByRole('status').filter({ hasText: 'Peter is now idle' })).toHaveCount(1);
+  await noReload();
+});
+
+test('a run that ends in StopFailure reads "Fell silent", live', async ({ page }) => {
+  await page.goto('/');
+  await waitForLive(page);
+  const noReload = await markNoReload(page);
+  const now = Date.now();
+  appendEvents(root, [
+    {
+      ts: new Date(now).toISOString(),
+      event: 'SubagentStart',
+      session: 'fail',
+      agent: 'peter',
+      agentId: 'agent-fail',
+    },
+    {
+      ts: new Date(now + 1).toISOString(),
+      event: 'StopFailure',
+      session: 'fail',
+      agent: 'peter',
+      agentId: 'agent-fail',
+    },
+  ]);
+  const peter = councilMember(page, 'Peter');
+  await expect(peter.getByText(/Fell silent: stopped by an error/)).toBeVisible({
+    timeout: 15_000,
+  });
+  await expect(peter.getByText('Active', { exact: true })).toHaveCount(0);
+  await noReload();
+});
+
+test('the Council tree follows the roster: new counsel, an unknown station, no title', async ({
+  page,
+  request,
+}) => {
+  await page.goto('/host');
+  await waitForLive(page);
+  const noReload = await markNoReload(page);
+  const extra = [
+    '| Raguel | Friend of God | Counsel | — | Watcher: keeps an eye on the watchers | Read | 2026-10-17 | 0 / 3 |',
+    '| Sariel | The Vigilant | Worker | Vigil | Night watch: guards the archive at rest | Read | 2026-10-17 | 0 / 3 |',
+    '| Phanuel | — | Worker | Test | Second tester: checks the checks | Read | 2026-10-17 | 0 / 3 |',
+  ];
+  writeFileSync(ROSTER, `${readFileSync(ROSTER, 'utf8').trimEnd()}\n${extra.join('\n')}\n`);
+  await settle(request, (s) => s.agents.some((a) => a.slug === 'sariel'), 'the new roster is read');
+
+  for (const live of [true, false]) {
+    if (!live) {
+      await page.reload();
+      await waitForLive(page);
+    }
+    const counsel = page.getByRole('region', { name: 'The Counsel' });
+    await expect(counsel.getByRole('link', { name: 'Raguel', exact: true })).toBeVisible({
+      timeout: 15_000,
+    });
+    await expect(counsel.getByRole('link', { name: 'Uriel', exact: true })).toBeVisible();
+    // An unknown station gets its own niche, titled as written, after the Order of Work.
+    const vigil = page.getByRole('list', { name: 'Vigil' });
+    await expect(vigil.getByRole('link', { name: 'Sariel', exact: true })).toBeVisible();
+    await expect(
+      page.getByRole('list', { name: 'Test' }).getByRole('link', { name: 'Phanuel', exact: true }),
+    ).toBeVisible();
+    // No title: the role's first clause stands in as the epithet.
+    await expect(
+      councilMember(page, 'Phanuel').getByText('Second tester', { exact: true }),
+    ).toBeVisible();
+    if (live) await noReload();
+  }
+  const response = await page.goto('/host/sariel');
+  expect(response?.status()).toBe(200);
+  await expect(page.locator('h1')).toHaveText('Sariel');
+});
+
+test('a new wing folder appears in the archive, without a reload', async ({ page }) => {
+  await page.goto('/limforia');
+  await waitForLive(page);
+  const noReload = await markNoReload(page);
+  const wings = page.locator('section[aria-labelledby="wings-heading"]');
+  await expect(wings.getByRole('link', { name: new RegExp(NEW_WING_TITLE) })).toHaveCount(0);
+  mkdirSync(NEW_WING_DIR, { recursive: true });
+  writeFileSync(
+    join(NEW_WING_DIR, '2026-10-17-first-watch.md'),
+    [
+      '---',
+      'type: chronicle',
+      'date: 2026-10-17',
+      'agents: [Peter]',
+      'tags: [e2e]',
+      'status: open',
+      '---',
+      '# The first watch',
+      '',
+      'Test data.',
+      '',
+    ].join('\n'),
+  );
+  await expect(wings.getByRole('link', { name: new RegExp(NEW_WING_TITLE) })).toBeVisible({
+    timeout: 15_000,
+  });
+  await expect(
+    page.getByRole('list', { name: 'Records' }).getByRole('link', { name: 'The first watch' }),
+  ).toBeVisible();
+  await noReload();
+  await wings.getByRole('link', { name: new RegExp(NEW_WING_TITLE) }).click();
+  await expect(page).toHaveURL(/wing=vigil-notes/);
+  await expect(page.getByRole('list', { name: 'Records' }).locator(':scope > li')).toHaveCount(1);
 });
