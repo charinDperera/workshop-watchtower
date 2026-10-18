@@ -9,7 +9,7 @@ It is deliberately broken so that every compliance check has a failing case:
 | 2 unique-names | Luke is on the roster twice; Azazel is on the roster and in the Soul Binder |
 | 3 record-headers | scriptorium/issues/bad-header.md (bad date, unknown status), vault-of-ideas/no-header.md (none), intel/broken-yaml.md (invalid YAML) |
 | 4 catalog-coverage | chronicles/2026-10-02-uncatalogued.md is not in the catalog; the catalog links a missing file |
-| 5 strike-counts | Peter: roster 0, audit hall 1 |
+| 5 strike-counts | Peter: roster 0, audit hall 1 (a strike); Azazel: roster 0, audit hall 1 (`outcome: executed` counts as a strike) |
 | 6 three-strikes | Thomas is at 3 / 3 and still on the roster |
 | 7 clean-tree | not a git repository (warn) |
 

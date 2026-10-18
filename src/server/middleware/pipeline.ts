@@ -6,7 +6,7 @@
  */
 import { envStatus } from '../config/env';
 import { errorResponse } from '../errors/responses';
-import { requestLogLevel } from '../logging/logger';
+import { requestLogLevel, type AppLogger } from '../logging/logger';
 import { createRequestPolicy, guardRequest, type GuardPolicy } from '../security/request-guard';
 import { attachRequestContext, clientAddressOf, REQUEST_ID_HEADER } from './request-context';
 import { withSecurityHeaders } from './security-headers';
@@ -17,6 +17,30 @@ interface PipelineContext {
   locals: App.Locals;
   clientAddress: string;
   routePattern?: string;
+  /** For Astro's error route, `{ error }`: the error it could not handle itself. */
+  props?: Record<string, unknown>;
+}
+
+/** Astro's server error route (`src/pages/500.astro`). */
+export const ERROR_ROUTE = '/500';
+
+/**
+ * Logs the error Astro hands its 500 page. Astro catches some failures before any middleware
+ * runs (a page module that fails to load) and renders `/500` with the error as a prop; the
+ * middleware runs for that render, so this is where that error reaches pino, once. Without an
+ * error object (a direct `GET /500`), a fallback line keeps "every 5xx has one line" true.
+ */
+function logErrorRoute(context: PipelineContext, log: AppLogger): void {
+  const err = context.props?.error;
+  const fields = { route: context.url.pathname, status: 500 };
+  if (err !== undefined) {
+    log.error('request.failed', 'Request failed before it reached the page', { ...fields, err });
+  } else {
+    log.error('request.failed', 'Server error page served without an error', {
+      ...fields,
+      reason: 'unhandled 5xx without an error',
+    });
+  }
 }
 
 let policy: GuardPolicy | null = null;
@@ -78,6 +102,7 @@ export async function handleRequest(
       active,
     );
     if (verdict.allow) {
+      if (context.routePattern === ERROR_ROUTE) logErrorRoute(context, log);
       try {
         response = await next();
       } catch (err) {

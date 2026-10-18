@@ -25,7 +25,7 @@ vi.mock('../../src/server/logging/logger', async (importOriginal) => {
   return { ...real, requestLog: () => log };
 });
 
-const { handleRequest } = await import('../../src/server/middleware/pipeline');
+const { ERROR_ROUTE, handleRequest } = await import('../../src/server/middleware/pipeline');
 
 const context = () => ({
   request: new Request('http://127.0.0.1:4321/activity', { headers: { host: '127.0.0.1:4321' } }),
@@ -76,5 +76,51 @@ describe('a page that throws while rendering', () => {
       rethrowRenderErrors: false,
     });
     expect(await response.text()).toBe('ok');
+  });
+});
+
+describe('an error Astro handles before any middleware (e.g. a page module fails to load)', () => {
+  /** Astro renders its error route, /500, with the error as a prop; the middleware runs. */
+  const errorRoute = (props: Record<string, unknown>) => ({
+    request: new Request('http://127.0.0.1:4321/git', { headers: { host: '127.0.0.1:4321' } }),
+    url: new URL('http://127.0.0.1:4321/git'),
+    locals: { requestId: 'edge-id-0001', edgeLogged: true } as App.Locals,
+    clientAddress: '127.0.0.1',
+    routePattern: ERROR_ROUTE,
+    props,
+  });
+  const page500 = async () => new Response('<p>Something went wrong</p>', { status: 500 });
+
+  it('logs the real error once, under the original request and route', async () => {
+    calls.length = 0;
+    const err = Object.assign(new Error("Cannot find module 'git_x.mjs'"), {
+      code: 'ERR_MODULE_NOT_FOUND',
+    });
+    const response = await handleRequest(errorRoute({ error: err }), page500, {
+      rethrowRenderErrors: false,
+    });
+    expect(response.status).toBe(500);
+    expect(response.headers.get('x-request-id')).toBe('edge-id-0001');
+    const errors = calls.filter((c) => c.level === 'error');
+    expect(errors).toEqual([
+      { level: 'error', event: 'request.failed', fields: { route: '/git', status: 500, err } },
+    ]);
+  });
+
+  it('logs a fallback only when no error object reached the page (a direct GET /500)', async () => {
+    calls.length = 0;
+    await handleRequest(errorRoute({}), page500, { rethrowRenderErrors: false });
+    expect(calls.filter((c) => c.level === 'error')).toMatchObject([
+      {
+        event: 'request.failed',
+        fields: { status: 500, reason: 'unhandled 5xx without an error' },
+      },
+    ]);
+  });
+
+  it('logs nothing extra for an ordinary route', async () => {
+    calls.length = 0;
+    await handleRequest(context(), async () => new Response('ok'), { rethrowRenderErrors: false });
+    expect(calls.filter((c) => c.level === 'error')).toEqual([]);
   });
 });

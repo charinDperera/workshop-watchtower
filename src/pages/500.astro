@@ -1,0 +1,28 @@
+---
+/**
+ * The server error page. Astro renders it when it cannot handle a request itself (for
+ * example a page module that fails to load, before any middleware runs), passing the error
+ * as `Astro.props.error`; the middleware logs that error once (src/server/middleware/pipeline.ts).
+ *
+ * Deliberately self-contained: no layout, component or style imports, so it still renders
+ * when a shared build chunk is the thing that failed. It never shows the error's detail.
+ */
+---
+
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Something went wrong · The Watchtower</title>
+  </head>
+  <body>
+    <main>
+      <h1>Something went wrong</h1>
+      <p>This page could not be shown. Please try again in a moment.</p>
+      <p>
+        <a href="/">Back to the overview</a>
+      </p>
+    </main>
+  </body>
+</html>
