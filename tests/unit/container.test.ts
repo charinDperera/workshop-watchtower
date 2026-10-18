@@ -1,6 +1,7 @@
 import { spawnSync } from 'node:child_process';
 import {
   appendFileSync,
+  existsSync,
   mkdirSync,
   readFileSync,
   rmSync,
@@ -419,15 +420,39 @@ describe('fail fast with a useful message', () => {
 
 describe('git in a container', () => {
   it('always runs git with fsmonitor off and no hooks, before the command', () => {
-    expect(GIT_SAFETY_ARGS).toEqual(['-c', 'core.fsmonitor=false', '-c', 'core.hooksPath=']);
+    expect(GIT_SAFETY_ARGS).toEqual([
+      '-c',
+      'core.fsmonitor=false',
+      '-c',
+      'core.hooksPath=/dev/null',
+    ]);
     expect(gitArgs(['status', '--porcelain=v2'])).toEqual([
       '-c',
       'core.fsmonitor=false',
       '-c',
-      'core.hooksPath=',
+      'core.hooksPath=/dev/null',
       'status',
       '--porcelain=v2',
     ]);
+  });
+
+  it('points hooks where no hook can ever exist (resolved by the real git)', async () => {
+    let resolved: string;
+    try {
+      // The app folder is a git repository; rev-parse only reads.
+      resolved = (
+        await createExecGit()(APP_DIR, ['rev-parse', '--git-path', 'hooks/pre-commit'])
+      ).trim();
+    } catch (err) {
+      if ((err as { kind?: string }).kind === 'missing-binary') return;
+      throw err;
+    }
+    // POSIX: /dev/null/pre-commit (/dev/null is not a folder). Git for Windows: nul/pre-commit.
+    expect(['/dev/null/pre-commit', 'nul/pre-commit']).toContain(resolved);
+    expect(existsSync(resolved)).toBe(false);
+    // Not the repository's hooks, and not the filesystem root (what an empty value gives).
+    expect(resolved).not.toContain('.git/hooks');
+    expect(resolved).not.toBe('/pre-commit');
   });
 
   it('runs the real git with those options', async () => {

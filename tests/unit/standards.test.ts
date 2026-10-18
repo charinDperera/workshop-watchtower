@@ -235,8 +235,13 @@ describe('client error reports', () => {
 
   it('is same-origin only', () => {
     const headers = (h: Record<string, string>) => new Headers(h);
+    const local = localOriginHosts([], null);
     expect(() =>
-      assertSameOrigin(headers({ host: '127.0.0.1:4321', origin: 'http://127.0.0.1:4321' })),
+      assertSameOrigin(
+        headers({ host: '127.0.0.1:4321', origin: 'http://127.0.0.1:4321' }),
+        null,
+        local,
+      ),
     ).not.toThrow();
     const refused: Record<string, string>[] = [
       { host: '127.0.0.1:4321' },
@@ -245,7 +250,9 @@ describe('client error reports', () => {
       { host: '127.0.0.1:4321', origin: 'http://127.0.0.1:4321', 'sec-fetch-site': 'cross-site' },
     ];
     for (const bad of refused) {
-      expect(() => assertSameOrigin(headers(bad))).toThrow('Cross-origin reports are not accepted');
+      expect(() => assertSameOrigin(headers(bad), null, local)).toThrow(
+        'Cross-origin reports are not accepted',
+      );
     }
   });
 
@@ -508,29 +515,42 @@ describe('review fixes', () => {
   it('accepts client reports from the public origin exactly, and still from this server', () => {
     const origin = 'https://dev-watchtower.workshop.io';
     const h = (o: Record<string, string>) => new Headers(o);
+    const local = localOriginHosts([], origin);
     expect(() =>
       assertSameOrigin(
         h({ host: 'dev-watchtower.workshop.io', origin, 'sec-fetch-site': 'same-origin' }),
         origin,
+        local,
       ),
     ).not.toThrow();
     expect(() =>
-      assertSameOrigin(h({ host: '127.0.0.1:4321', origin: 'http://127.0.0.1:4321' }), origin),
+      assertSameOrigin(
+        h({ host: '127.0.0.1:4321', origin: 'http://127.0.0.1:4321' }),
+        origin,
+        local,
+      ),
     ).not.toThrow();
     // A plain-http page on the public host is a downgrade, not this server's origin: refused.
     expect(() =>
       assertSameOrigin(
         h({ host: 'dev-watchtower.workshop.io', origin: 'http://dev-watchtower.workshop.io' }),
         origin,
+        local,
       ),
     ).toThrow('Cross-origin reports are not accepted');
     for (const bad of ['https://evil.test', `${origin}.evil.test`, 'https://workshop.io']) {
       expect(() =>
-        assertSameOrigin(h({ host: 'dev-watchtower.workshop.io', origin: bad }), origin),
+        assertSameOrigin(h({ host: 'dev-watchtower.workshop.io', origin: bad }), origin, local),
       ).toThrow('Cross-origin reports are not accepted');
     }
     // Without a public origin, the gateway's origin is refused.
-    expect(() => assertSameOrigin(h({ host: 'dev-watchtower.workshop.io', origin }))).toThrow();
+    expect(() =>
+      assertSameOrigin(
+        h({ host: 'dev-watchtower.workshop.io', origin }),
+        null,
+        localOriginHosts([], null),
+      ),
+    ).toThrow();
   });
 
   it('refuses the public host over plain http (Peter: watchtower.e2e.test repro)', () => {

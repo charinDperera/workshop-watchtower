@@ -5,7 +5,6 @@
  */
 import { z } from 'zod';
 import { hostOfOrigin } from '../../../scripts/server-env.mjs';
-import { serverEnv } from '../config/env';
 import { DEFAULT_ALLOWED_HOSTS } from '../security/request-guard';
 import {
   BadRequestError,
@@ -97,8 +96,8 @@ export function localOriginHosts(
  */
 export function assertSameOrigin(
   headers: Headers,
-  publicOrigin: string | null = null,
-  localHosts: readonly string[] = localOriginHosts(serverEnv().allowedHosts, publicOrigin),
+  publicOrigin: string | null,
+  localHosts: readonly string[],
 ): void {
   const host = headers.get('host')?.trim().toLowerCase() ?? null;
   const origin = headers.get('origin');

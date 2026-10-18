@@ -103,6 +103,7 @@ export async function buildSnapshot(deps: SnapshotDeps): Promise<Snapshot> {
     retired: soulBinder.items,
     live,
     auditLogs: auditIndex.bySubject,
+    pardonedAt: auditIndex.pardonedAt,
     recentEvents: recentEventsByAgent(eventLog.events, AGENT_RECENT_EVENTS),
   });
 
@@ -122,6 +123,7 @@ export async function buildSnapshot(deps: SnapshotDeps): Promise<Snapshot> {
     catalog: crossed.entries,
     catalogFound: catalog.found,
     strikeLogs: auditIndex.strikes,
+    pardonedAt: auditIndex.pardonedAt,
     unattributedAudits: auditIndex.unattributed,
     workstationGit: workstation,
   });

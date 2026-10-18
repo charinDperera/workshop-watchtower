@@ -24,7 +24,10 @@ export interface ComplianceInput {
   catalog: CatalogEntry[];
   catalogFound: boolean;
   /** Audit logs that count as strikes, keyed by agent slug. */
+  /** Strike logs that still count per agent: those dated after its latest pardon. */
   strikeLogs: Map<string, string[]>;
+  /** Each pardoned agent's latest pardon date (optional; for the messages). */
+  pardonedAt?: Map<string, string>;
   /** Audit logs whose subject agent could not be determined. */
   unattributedAudits: string[];
   workstationGit: RepoState;
@@ -123,7 +126,9 @@ export function checkStrikeCounts(input: ComplianceInput): CheckBody {
     if (entry.strikes === null) {
       fails.push(`${entry.name}: strike count is unreadable`);
     } else if (entry.strikes !== logged) {
-      fails.push(`${entry.name}: roster says ${entry.strikes}, audit hall holds ${logged}`);
+      const since = input.pardonedAt?.get(slug);
+      const scope = since ? ` after the pardon of ${since}` : '';
+      fails.push(`${entry.name}: roster says ${entry.strikes}, audit hall holds ${logged}${scope}`);
     }
   }
   for (const [slug, logs] of input.strikeLogs) {
@@ -140,13 +145,17 @@ export function checkStrikeCounts(input: ComplianceInput): CheckBody {
   return verdict(fails, warns);
 }
 
-/** Check 6 (First Law): no agent at the strike limit is still on the roster. */
+/**
+ * Check 6 (First Law): no agent at the strike limit is still on the roster. Counts the
+ * strike logs that still count (after the agent's latest pardon), the same count as check 5.
+ */
 export function checkThreeStrikes(input: ComplianceInput): CheckBody {
   const fails = input.roster
-    .filter((entry) => entry.strikes !== null && entry.strikes >= entry.strikeLimit)
+    .map((entry) => ({ entry, count: input.strikeLogs.get(slugOf(entry.name))?.length ?? 0 }))
+    .filter(({ entry, count }) => count >= entry.strikeLimit)
     .map(
-      (entry) =>
-        `${entry.name} has ${entry.strikes} / ${entry.strikeLimit} strikes and is still active`,
+      ({ entry, count }) =>
+        `${entry.name} has ${count} / ${entry.strikeLimit} strikes and is still active`,
     );
   return verdict(fails);
 }

@@ -28,6 +28,7 @@ function agent(name: string, partial: Partial<Agent> = {}): Agent {
     lastEnd: null,
     stage: null,
     auditLogs: [],
+    pardonedAt: null,
     recentEvents: [],
     ...partial,
   };

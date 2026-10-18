@@ -223,8 +223,13 @@ export interface Agent {
   lastEnd: AgentEnd | null;
   /** Id of the pipeline stage of a worker's station; `null` for overseer, counsel or none. */
   stage: PipelineStageId | null;
-  /** Paths of audit-hall records about this agent. */
+  /** Paths of audit-hall records about this agent, pardons included. */
   auditLogs: string[];
+  /**
+   * The date (`YYYY-MM-DD`) of this agent's latest pardon, or `null`. Strike logs dated on
+   * or before it no longer count; a pardon log has `outcome: pardon` in its header.
+   */
+  pardonedAt: string | null;
   /**
    * This agent's newest events (at most `AGENT_RECENT_EVENTS`, 25), newest first, from the
    * whole log (current and rotated file), independent of the snapshot's activity cap.

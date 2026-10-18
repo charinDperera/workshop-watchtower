@@ -1,10 +1,12 @@
 <!--
   @component
   The Council as an illuminated hierarchy. The Overseers stand at the top, centred, with the
-  Counsel beside them as their hands, joined by short gilded links at seal height: the first
-  counsel at the right hand, the next at the left, then outward. No empty seat is drawn.
+  Advisors (rank `counsel`) beside them as their hands: the first at the right hand, the
+  next at the left, then outward. Each side carries its own label ("The Advisor", or "The
+  Advisors" when the side holds more than one) with its seals centred beneath it, a little
+  lower than the Overseer's, joined to him by an angled gilded link. No empty seat is drawn.
   A short spine leads down to the Order of Work, whose stations hang from a gilded bar in
-  roster order. On narrow trees the Counsel stand directly under the Overseer.
+  roster order. On narrow trees the Advisors stand directly under the Overseer.
 
   When the tree is wide enough for every worker side by side, the stations hang in a row from
   the bar; otherwise they stack as tiers down the spine, so at 360 px the tree reads as a
@@ -13,7 +15,7 @@
 
   Accessible structure: one heading per tier (and per station) and a list of members under
   each, every name a link to the agent's page. Every line and ornament is aria-hidden.
-  Fully data-driven: any number of overseers, counsel, workers and stations.
+  Fully data-driven: any number of overseers, advisors, workers and stations.
 -->
 <script lang="ts">
   import type { Agent, PipelineStage } from '../shared/types';
@@ -48,7 +50,7 @@
   const tiers = $derived(agents ? councilTiers(agents, stages ?? []) : null);
   const tierTag = $derived(`h${level}`);
   const stationTag = $derived(`h${level + 1}`);
-  // Counsel stand at the Overseer's hands: the first at his right (the viewer's right), the
+  // Advisors stand at the Overseer's hands: the first at his right (the viewer's right), the
   // second at his left, then alternating outward.
   const counselRight = $derived(tiers?.counsel.filter((_, i) => i % 2 === 0) ?? []);
   const counselLeft = $derived(tiers?.counsel.filter((_, i) => i % 2 === 1) ?? []);
@@ -86,14 +88,34 @@
 {/snippet}
 
 {#snippet hands(members: Agent[], side: 'left' | 'right')}
-  <ul class="council-hands {side}" aria-label="The Counsel, at the {side} hand">
-    {#each members as agent, i (`${agent.slug}-${i}`)}
-      <li class="council-hand {side}">
-        <span class="council-hand-link" aria-hidden="true"></span>
-        <div class="w-32 sm:w-40"><CouncilMember {agent} {now} /></div>
-      </li>
-    {/each}
-  </ul>
+  {@const title = tierTitle('counsel', members.length)}
+  <div class="council-side {side}">
+    <!-- From the Overseer's seal down to the advisor's: an angled gilded link (wide trees). -->
+    <svg
+      class="council-hand-link"
+      viewBox="0 0 40 28"
+      preserveAspectRatio="none"
+      aria-hidden="true"
+      focusable="false"
+    >
+      <path
+        d={side === 'right' ? 'M0 0.5 L40 27.5' : 'M40 0.5 L0 27.5'}
+        stroke="currentColor"
+        stroke-width="1"
+        vector-effect="non-scaling-stroke"
+        fill="none"
+      />
+    </svg>
+    <div class="council-hand-group">
+      <span class="council-spine council-stack-only h-3" aria-hidden="true"></span>
+      <div class="mb-2">{@render caption(`${uid}-advisor-${side}`, title)}</div>
+      <ul class="council-hands" aria-label="{title}, at the {side} hand">
+        {#each members as agent, i (`${agent.slug}-${i}`)}
+          <li class="w-32 sm:w-40"><CouncilMember {agent} {now} /></li>
+        {/each}
+      </ul>
+    </div>
+  </div>
 {/snippet}
 
 {#if error && !agents}
@@ -126,10 +148,6 @@
         </ul>
       {/if}
       {#if tiers.counsel.length > 0}
-        <div class="council-ccap">
-          <span class="council-spine council-stack-only h-3" aria-hidden="true"></span>
-          {@render caption(`${uid}-counsel`, tierTitle('counsel', tiers.counsel.length))}
-        </div>
         <div class="council-right">{@render hands(counselRight, 'right')}</div>
         {#if counselLeft.length > 0}
           <div class="council-left">{@render hands(counselLeft, 'left')}</div>
@@ -198,21 +216,21 @@
   }
 
   /*
-   * The top tier. Narrow trees stack it: the Overseer, then the Counsel directly under him
-   * (side by side when there are two sides), each hung from a short link.
+   * The top tier. Narrow trees stack it: the Overseer, then the Advisors directly under him
+   * (side by side when there are two sides), each group hung from a short spine.
    */
   .council-top {
     display: grid;
     width: 100%;
     grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-    grid-template-areas: 'ocap ocap' 'over over' 'ccap ccap' 'left right';
+    grid-template-areas: 'ocap ocap' 'over over' 'left right';
     justify-items: center;
     row-gap: calc(var(--spacing) * 1);
     column-gap: calc(var(--spacing) * 2);
   }
   .council-top.solo {
     grid-template-columns: minmax(0, 1fr);
-    grid-template-areas: 'ocap' 'over' 'ccap' 'right';
+    grid-template-areas: 'ocap' 'over' 'right';
   }
   .council-top.no-counsel {
     grid-template-columns: minmax(0, 1fr);
@@ -232,17 +250,26 @@
     width: calc(var(--spacing) * 64);
     max-width: 100%;
   }
-  .council-ccap {
-    grid-area: ccap;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-  }
   .council-right {
     grid-area: right;
   }
   .council-left {
     grid-area: left;
+  }
+  .council-side {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+  }
+  .council-hand-link {
+    display: none;
+    color: color-mix(in oklab, var(--color-gold) 70%, transparent);
+  }
+  /* A side's label with its seals centred beneath it. */
+  .council-hand-group {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
   }
   .council-hands {
     display: flex;
@@ -250,36 +277,24 @@
     justify-content: center;
     gap: calc(var(--spacing) * 2);
   }
-  .council-hand {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-  }
-  /* A short gilded link: vertical when stacked, horizontal at the hands. */
-  .council-hand-link {
-    width: 1px;
-    height: calc(var(--spacing) * 3);
-    background-color: color-mix(in oklab, var(--color-gold) 65%, transparent);
-  }
 
   /*
-   * Wide trees: one row. The Overseer is centred (equal side columns); the Counsel stand at
-   * his hands, their seals level with his. Offsets follow the sm seal frames in HaloSigil
-   * (Overseer 12rem, Counsel 7rem): the hand drops 2.5rem, its link sits at 3.5rem.
+   * Wide trees: one row. The Overseer is centred (equal side columns); the Advisors stand at
+   * his hands, a little lower. Offsets follow the sm frames in HaloSigil (Overseer 12rem, so
+   * his seal centre is 6rem down; Advisor 7rem, seal 5.5rem): the group drops 2.75rem and its
+   * label takes 1.5rem, so the advisor's seal centre sits at 7.75rem, 1.75rem (about a third
+   * of the advisor's seal) below the Overseer's. The link runs between the two centres.
    */
   @container council (width >= 38rem) {
     .council-top:not(.no-counsel) {
       grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
-      grid-template-areas: '. ocap ccap' 'left over right';
+      /* The Overseer's label spans the row, so his column hugs his seal and the links touch it. */
+      grid-template-areas: 'ocap ocap ocap' 'left over right';
       column-gap: 0;
       align-items: start;
     }
     .council-stack-only {
       display: none;
-    }
-    .council-ccap {
-      justify-self: start;
-      padding-left: calc(var(--spacing) * 10);
     }
     .council-right {
       justify-self: start;
@@ -290,27 +305,31 @@
     .council-overseer {
       width: calc(var(--spacing) * 48);
     }
-    .council-hands {
-      flex-wrap: nowrap;
-      gap: 0;
-    }
-    .council-hands.left,
-    .council-hand.left {
-      flex-direction: row-reverse;
-    }
-    .council-hand {
+    .council-side {
       flex-direction: row;
       align-items: flex-start;
-      margin-top: calc(var(--spacing) * 10);
     }
-    /* The link runs on into the hand's figure box, up to its orbit (figure 10rem, seal 7rem). */
+    .council-side.left {
+      flex-direction: row-reverse;
+    }
+    .council-hand-group {
+      margin-top: calc(var(--spacing) * 11);
+    }
+    .council-hands {
+      flex-wrap: nowrap;
+      gap: calc(var(--spacing) * 4);
+    }
+    /* It runs on into the advisor's figure box, up to the orbit (figure 10rem, seal 7rem). */
     .council-hand-link {
+      display: block;
+      flex-shrink: 0;
       width: calc(var(--spacing) * 10);
-      height: 1px;
-      margin-top: calc(var(--spacing) * 14);
+      height: calc(var(--spacing) * 7);
+      margin-top: calc(var(--spacing) * 24);
       margin-inline-end: calc(var(--spacing) * -5);
+      overflow: visible;
     }
-    .council-hand.left > .council-hand-link {
+    .council-side.left > .council-hand-link {
       margin-inline-end: 0;
       margin-inline-start: calc(var(--spacing) * -5);
     }

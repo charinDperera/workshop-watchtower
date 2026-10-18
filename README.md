@@ -83,6 +83,12 @@ How the container is set up (`Dockerfile`, `compose.yaml`):
   (losing it only resets the limits). Killing or restarting the server loses nothing.
 - **BFF (Order 2).** The browser calls only this app's own endpoints (`/api/*`). It makes
   no calls to any other service, internal or external.
+- **Live stream backpressure: an upstream limit.** `/api/stream` keeps only the newest
+  snapshot for a client that falls behind (`src/server/live/sse.ts`). Astro 7.4's Node
+  response writer does not wait for the socket to drain, so in production that logic does
+  not engage, and Node buffers a slow client instead. This is accepted: snapshots are
+  debounced and never re-sent unchanged, and the only clients are the gateway and a local
+  browser. The logic takes effect once Astro honours backpressure.
 
 ## Configuration (ADR-006)
 

@@ -1,6 +1,7 @@
 /**
  * The Council as a hierarchy, derived from the agents alone: the Overseers at the top, the
- * Counsel set apart, and the workers grouped by station in the Order of Work.
+ * Advisors (rank `counsel`) at their hands, and the workers grouped by station in the Order
+ * of Work.
  * Pure and data-driven: no agent or station names are written here.
  */
 import type { Agent, PipelineStage } from '../shared/types';
@@ -121,15 +122,18 @@ export function agentLines(agent: Pick<Agent, 'title' | 'role'>): {
 /** Where the agent stands, in words: "Overseer of The Council", "Serves at Build". */
 export function rankLabel(agent: Pick<Agent, 'rank' | 'station'>): string {
   if (agent.rank === 'overseer') return 'Overseer of The Council';
-  if (agent.rank === 'counsel') return 'Counsel to The Council';
+  if (agent.rank === 'counsel') return 'Advisor to The Council';
   const station = agent.station?.trim();
   return station ? `Serves at ${station}` : 'Serves The Council, awaiting a station';
 }
 
-/** Tier headings, singular or plural by count. */
+/**
+ * Tier headings, singular or plural by count. The `counsel` rank is shown as the Advisors;
+ * the tree labels each side of the Overseer with the count on that side.
+ */
 export function tierTitle(tier: 'overseer' | 'counsel', count: number): string {
   if (tier === 'overseer') return count === 1 ? 'The Overseer' : 'The Overseers';
-  return 'The Counsel';
+  return count === 1 ? 'The Advisor' : 'The Advisors';
 }
 
 export type Liveness =

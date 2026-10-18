@@ -68,14 +68,15 @@ test.describe('overview content', () => {
 });
 
 test.describe('the Council tree on /host', () => {
-  test('the Counsel stand at the hands of the Overseer, with no empty seat', async ({ page }) => {
+  test('the Advisor stands at the right hand of the Overseer, a little lower', async ({ page }) => {
     await page.setViewportSize({ width: 1440, height: 900 });
     await page.goto('/host');
-    const rightHand = page.getByRole('list', { name: 'The Counsel, at the right hand' });
+    const rightHand = page.getByRole('list', { name: 'The Advisor, at the right hand' });
     await expect(rightHand.getByRole('link', { name: 'Uriel', exact: true })).toBeVisible();
-    // One counsel today: nothing is drawn at the left hand.
-    await expect(page.getByRole('list', { name: 'The Counsel, at the left hand' })).toHaveCount(0);
-    // At 1440 the hand's seal is level with the Overseer's, to his right, and he stays centred.
+    // One advisor today: nothing is drawn at the left hand.
+    await expect(page.getByRole('list', { name: /at the left hand$/ })).toHaveCount(0);
+    // At 1440 the advisor's seal is lower than the Overseer's and to his right, centred under
+    // its label; the Overseer stays centred.
     const seal = (name: string) =>
       page
         .locator('.council li')
@@ -84,18 +85,23 @@ test.describe('the Council tree on /host', () => {
         .locator('[data-rank]')
         .first()
         .boundingBox();
-    const [overseer, hand, tree] = await Promise.all([
+    const [overseer, hand, tree, label] = await Promise.all([
       seal('Michael'),
       seal('Uriel'),
       page.locator('.council').boundingBox(),
+      page.getByRole('heading', { name: 'The Advisor', exact: true }).boundingBox(),
     ]);
-    if (!overseer || !hand || !tree) throw new Error('the tree did not render');
+    if (!overseer || !hand || !tree || !label) throw new Error('the tree did not render');
     const centreY = (b: { y: number; height: number }) => b.y + b.height / 2;
     const centreX = (b: { x: number; width: number }) => b.x + b.width / 2;
-    expect(Math.abs(centreY(hand) - centreY(overseer))).toBeLessThanOrEqual(2);
+    // Lower by a step (about a third of its seal), but less than half its frame: still at his hand.
+    const drop = centreY(hand) - centreY(overseer);
+    expect(drop).toBeGreaterThanOrEqual(16);
+    expect(drop).toBeLessThan(hand.height / 2);
     expect(centreX(hand)).toBeGreaterThan(centreX(overseer));
+    expect(Math.abs(centreX(label) - centreX(hand))).toBeLessThanOrEqual(2);
     expect(Math.abs(centreX(overseer) - centreX(tree))).toBeLessThanOrEqual(2);
-    // The Overseer, the Counsel and the station niches fit in one 900 px view.
+    // The Overseer, the Advisor and the station niches fit in one 900 px view.
     expect(tree.height).toBeLessThanOrEqual(900);
   });
 });

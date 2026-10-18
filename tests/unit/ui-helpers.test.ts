@@ -128,6 +128,7 @@ function agent(partial: Partial<Agent> = {}): Agent {
     lastEnd: null,
     stage: 'build',
     auditLogs: [],
+    pardonedAt: null,
     recentEvents: [],
     ...partial,
   };

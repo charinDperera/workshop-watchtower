@@ -1,6 +1,6 @@
 ---
 /**
- * The Council: every agent of the roster as a live hierarchy (Overseers, Counsel and the
+ * The Council: every agent of the roster as a live hierarchy (Overseers, Advisors and the
  * stations of the Order of Work), plus a word on the departed.
  */
 import ErrorState from '../../components/ErrorState.svelte';
@@ -17,7 +17,7 @@ const retryHref = Astro.url.pathname;
 const retired = snapshot?.retired.length ?? 0;
 const tiers = snapshot ? councilTiers(snapshot.agents, snapshot.pipeline) : null;
 const lede = tiers
-  ? `${plural(tiers.count, 'agent')} serve the workstation: ${plural(tiers.overseers.length, 'overseer')}, ${tiers.counsel.length} in counsel and ${plural(tiers.stations.length, 'station')} in the Order of Work.`
+  ? `${plural(tiers.count, 'agent')} serve the workstation: ${plural(tiers.overseers.length, 'overseer')}, ${plural(tiers.counsel.length, 'advisor')} and ${plural(tiers.stations.length, 'station')} in the Order of Work.`
   : 'The agents who serve the workstation, from the Overseer to the Order of Work.';
 ---
 

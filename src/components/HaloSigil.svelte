@@ -1,7 +1,7 @@
 <!--
   @component
   A sigil set for The Council. The rank sets the ornament: the Overseer stands in a radiance
-  of gilded rays, the Counsel inside a dashed orbit, workers in the plain seal. While the
+  of gilded rays, the Advisors (rank `counsel`) inside a dashed orbit, workers in the plain seal. While the
   agent is active a green halo breathes around the seal; under reduced motion it rests as a
   steady ring. Decorative throughout: the name and status are always written beside it.
 -->
@@ -25,7 +25,7 @@
    * The frame (outer box) and the seal inside it, per rank and size. The Overseer's frame is
    * wider than the seal to hold the rays. Cards share one frame size across ranks, so names
    * line up in a row of cards. The tree's top-tier layout (CouncilTree) relies on the sm
-   * tier frames: Overseer size-48, Counsel size-28.
+   * tier frames: Overseer size-48, Advisor size-28.
    */
   const FRAME = {
     overseer: {

@@ -305,9 +305,10 @@ test('the Council tree follows the roster: new counsel, an unknown station, no t
       await page.reload();
       await waitForLive(page);
     }
-    // The Counsel stand at the Overseer's hands: the first at his right, the next at his left.
-    const rightHand = page.getByRole('list', { name: 'The Counsel, at the right hand' });
-    const leftHand = page.getByRole('list', { name: 'The Counsel, at the left hand' });
+    // Advisors stand at the Overseer's hands: the first at his right, the next at his left.
+    // One on each side, so each side is labelled in the singular.
+    const rightHand = page.getByRole('list', { name: 'The Advisor, at the right hand' });
+    const leftHand = page.getByRole('list', { name: 'The Advisor, at the left hand' });
     await expect(leftHand.getByRole('link', { name: 'Raguel', exact: true })).toBeVisible({
       timeout: 15_000,
     });

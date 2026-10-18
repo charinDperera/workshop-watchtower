@@ -17,10 +17,13 @@ import {
   type AgentJoinInput,
 } from '../../src/server/services/agents';
 import {
+  AUDIT_OUTCOMES,
   countWings,
   discoverWings,
   indexAuditLogs,
+  isPardonLog,
   isStrikeLog,
+  pardonedSlugs,
 } from '../../src/server/services/archive';
 import {
   checkCatalogCoverage,
@@ -453,6 +456,100 @@ describe('archive', () => {
   });
 });
 
+describe('pardons', () => {
+  /** An audit log with a real header (parsed like the archive). */
+  const log = (name: string, header: string) =>
+    parseRecord(`limforia/audit-hall/${name}.md`, `---\ntype: audit\n${header}\n---\n# ${name}\n`);
+  const pardon = log(
+    'pardon',
+    'date: 2026-10-18\nagents: [Michael]\noutcome: pardon\npardons: [PAUL, Peter]',
+  );
+  const audits = [
+    { record: log('paul-before', 'date: 2026-10-17\noutcome: strike'), subject: 'Paul' },
+    { record: log('paul-same-day', 'date: 2026-10-18\noutcome: strike'), subject: 'Paul' },
+    { record: log('paul-after', 'date: 2026-10-19\noutcome: strike'), subject: 'Paul' },
+    { record: log('peter-before', 'date: 2026-10-01\noutcome: executed'), subject: 'Peter' },
+    { record: log('thomas-before', 'date: 2026-10-17\noutcome: strike'), subject: 'Thomas' },
+    { record: pardon, subject: 'Michael' },
+  ];
+
+  it('is not a strike, and is filed under every agent it pardons (case-insensitive)', () => {
+    expect(isPardonLog(pardon.header)).toBe(true);
+    expect(isStrikeLog(pardon.header)).toBe(false);
+    expect(pardonedSlugs(pardon.header)).toEqual(['paul', 'peter']);
+    expect(AUDIT_OUTCOMES).toContain('pardon');
+    const index = indexAuditLogs(audits);
+    expect(index.bySubject.get('paul')).toContain('limforia/audit-hall/pardon.md');
+    expect(index.bySubject.get('peter')).toContain('limforia/audit-hall/pardon.md');
+    // Michael wrote it (agents) but is not pardoned by it: pardons, when present, decide.
+    expect(index.bySubject.get('michael')).toBeUndefined();
+    expect([...index.pardonedAt.entries()]).toEqual([
+      ['paul', '2026-10-18'],
+      ['peter', '2026-10-18'],
+    ]);
+  });
+
+  it('covers strikes dated on or before it; later ones and other agents still count', () => {
+    const index = indexAuditLogs(audits);
+    // Paul: the 17th and the 18th (same day) are covered, the 19th counts.
+    expect(index.strikes.get('paul')).toEqual(['limforia/audit-hall/paul-after.md']);
+    // Peter: fully pardoned.
+    expect(index.strikes.get('peter')).toBeUndefined();
+    // Thomas is not named by the pardon.
+    expect(index.strikes.get('thomas')).toEqual(['limforia/audit-hall/thomas-before.md']);
+  });
+
+  it('falls back to agents without a pardons key; the latest pardon wins', () => {
+    const early = log('early', 'date: 2026-10-10\nagents: [Thomas]\noutcome: pardon');
+    const late = log('late', 'date: 2026-10-20\nagents: [thomas]\noutcome: pardon');
+    expect(pardonedSlugs(early.header)).toEqual(['thomas']);
+    const index = indexAuditLogs([
+      { record: log('t1', 'date: 2026-10-15\noutcome: strike'), subject: 'Thomas' },
+      { record: late, subject: null },
+      { record: early, subject: null },
+    ]);
+    expect(index.pardonedAt.get('thomas')).toBe('2026-10-20');
+    expect(index.strikes.get('thomas')).toBeUndefined();
+    expect(index.unattributed).toEqual([]);
+  });
+
+  it('never covers a strike without a valid date', () => {
+    const index = indexAuditLogs([
+      { record: log('undated', 'outcome: strike'), subject: 'Paul' },
+      { record: pardon, subject: null },
+    ]);
+    expect(index.strikes.get('paul')).toEqual(['limforia/audit-hall/undated.md']);
+  });
+
+  it('feeds checks 5 and 6 the post-pardon count', () => {
+    const index = indexAuditLogs(audits);
+    const base = {
+      strikeLogs: index.strikes,
+      pardonedAt: index.pardonedAt,
+    };
+    // Roster after the pardon: Paul 1 (the strike after it), Peter 0, Thomas 1.
+    const ok = checkStrikeCounts(
+      input({
+        ...base,
+        roster: roster([
+          ['Michael', 'Main agent', 0],
+          ['Paul', 'Backend', 1],
+          ['Peter', 'Tester', 0],
+          ['Thomas', 'Reviewer', 1],
+        ]),
+      }),
+    );
+    expect(ok.result).not.toBe('fail');
+    const off = checkStrikeCounts(input({ ...base, roster: roster([['Paul', 'Backend', 0]]) }));
+    expect(off.details).toContain(
+      'Paul: roster says 0, audit hall holds 1 after the pardon of 2026-10-18',
+    );
+    expect(
+      checkThreeStrikes(input({ ...base, roster: roster([['Paul', 'Backend', 3]]) })).result,
+    ).toBe('pass');
+  });
+});
+
 const cleanGit: RepoState = {
   path: '.',
   isRepo: true,
@@ -571,12 +668,24 @@ describe('compliance checks', () => {
     expect(checkStrikeCounts(input({ unattributedAudits: ['u.md'] })).result).toBe('warn');
   });
 
-  it('6: an agent at the limit fails', () => {
-    const r = checkThreeStrikes(input({ roster: roster([['Thomas', 'Reviewer', 3]]) }));
+  it('6: an agent with 3 strike logs that still count fails', () => {
+    const three = ['a.md', 'b.md', 'c.md'].map((f) => `limforia/audit-hall/${f}`);
+    const r = checkThreeStrikes(
+      input({
+        roster: roster([['Thomas', 'Reviewer', 3]]),
+        strikeLogs: new Map([['thomas', three]]),
+      }),
+    );
     expect(r).toEqual({
       result: 'fail',
       details: ['Thomas has 3 / 3 strikes and is still active'],
     });
+  });
+
+  it('6: counts what check 5 counts, so pardoned strikes no longer fail it', () => {
+    // The roster number alone is check 5's business (roster vs audit hall).
+    const r = checkThreeStrikes(input({ roster: roster([['Thomas', 'Reviewer', 3]]) }));
+    expect(r).toEqual({ result: 'pass', details: [] });
   });
 
   it('7: a dirty tree or unknown git state warns', () => {

@@ -73,12 +73,14 @@ export const execGit: GitRunner = createExecGit();
 /**
  * Fixed options before every command: never start a filesystem monitor daemon, and never run
  * hooks, whatever the repository's own config says (a mounted repo is not ours to trust).
+ * Hooks point at `/dev/null`, which is never a folder (Git for Windows resolves it to
+ * `nul/`), so no hook file can exist there. An EMPTY hooksPath would point at the root.
  */
 export const GIT_SAFETY_ARGS: readonly string[] = [
   '-c',
   'core.fsmonitor=false',
   '-c',
-  'core.hooksPath=',
+  'core.hooksPath=/dev/null',
 ];
 
 /** The full argument list for one git call: the safety options, then the command. */

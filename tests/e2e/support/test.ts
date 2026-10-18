@@ -37,14 +37,10 @@ interface Fixtures {
 
 export const test = base.extend<Fixtures>({
   allowConsoleErrors: [
-    async ({ page, browserName }, use) => {
+    async ({ page }, use) => {
+      // No standing allowances: the live stream closes on pagehide, so navigations produce
+      // no stream errors in any browser (WebKit's "access control checks" included).
       const allowed: RegExp[] = [];
-      // WebKit reports the live stream being torn down by a navigation as a page error,
-      // "…/api/stream due to access control checks." (seen once in Luke's run on /activity;
-      // the app sent no client report and the navigation completed). The stream is
-      // same-origin, so a real access-control failure cannot cause this, and a stream that
-      // never opens fails waitForLive. Only this exact message, only in WebKit.
-      if (browserName === 'webkit') allowed.push(/\/api\/stream due to access control checks\.$/);
       const errors: string[] = [];
       page.on('console', (msg) => {
         if (msg.type() === 'error') errors.push(msg.text());

@@ -3,10 +3,17 @@
  * a `snapshot` event on connect and on every change, an `activity` event per hook event,
  * a `: ping` comment every 15 s, and full cleanup when the client goes away.
  *
- * Backpressure: a slow client never makes the server buffer snapshots. While the stream's
- * queue is full, only the newest snapshot is kept and sent when the client catches up;
- * activity events and pings are dropped once `MAX_QUEUED_CHUNKS` are waiting (the next
- * snapshot carries the recent activity anyway).
+ * Backpressure: while the stream's queue is full, only the newest snapshot is kept and sent
+ * when the client catches up; activity events and pings are dropped once
+ * `MAX_QUEUED_CHUNKS` are waiting (the next snapshot carries the recent activity anyway).
+ *
+ * UPSTREAM LIMIT (Astro 7.4): Astro's Node `writeResponse` reads this stream as fast as it
+ * produces and calls `res.write()` without waiting for 'drain', so the queue never fills and
+ * the logic above does not engage in production; a slow client is buffered by Node's socket
+ * instead. Accepted, not worked around: snapshots are debounced (300 ms) and identical ones
+ * are never re-sent, and the only clients are the gateway and a local browser. Serving the
+ * stream from the Node edge instead would split one route into two implementations. The
+ * logic stays (unit-tested) and takes effect as soon as Astro honours backpressure.
  */
 import type { ActivityEvent, Snapshot } from '../../shared/types';
 import { systemLog } from '../logging/logger';

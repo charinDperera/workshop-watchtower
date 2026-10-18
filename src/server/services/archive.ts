@@ -8,6 +8,7 @@ import type {
 import { wingTitle } from '../../shared/wings';
 import { PATHS } from '../constants';
 import type { RawCatalogEntry } from '../sources/parse/registers';
+import { toStringList } from '../sources/parse/frontmatter';
 import { slugOf } from './agents';
 
 export interface WingFolder {
@@ -62,38 +63,88 @@ export function crossCheckCatalog(
   };
 }
 
-/** Audit logs that count as strikes: outcome `strike` or `executed`; `dismissed` does not. */
+/**
+ * Audit log outcomes the workstation uses (the `outcome` key of an audit log's header).
+ * An audit log without an outcome is a strike. Other values are kept but count as nothing.
+ */
+export const AUDIT_OUTCOMES = ['strike', 'executed', 'dismissed', 'pardon'] as const;
+
+/** Audit logs that count as strikes: outcome `strike` or `executed` (or none). */
 export function isStrikeLog(header: RecordHeader): boolean {
   const outcome = header.extra.outcome;
   return outcome === undefined || outcome === 'strike' || outcome === 'executed';
 }
 
+/** A pardon (outcome `pardon`): it forgives earlier strikes and is never a strike itself. */
+export function isPardonLog(header: RecordHeader): boolean {
+  return header.extra.outcome === 'pardon';
+}
+
+/** The agents a pardon names: its `pardons` list, else its `agents`, as slugs. */
+export function pardonedSlugs(header: RecordHeader): string[] {
+  const named = toStringList(header.extra.pardons);
+  return [...new Set((named.length > 0 ? named : header.agents).map(slugOf))].filter(
+    (slug) => slug !== '',
+  );
+}
+
 export interface AuditIndex {
-  /** Every audit log about an agent, keyed by slug (for the agent pages). */
+  /** Every audit log about an agent, keyed by slug (for the agent pages); pardons included. */
   bySubject: Map<string, string[]>;
-  /** The subset that counts as strikes (for check 5). */
+  /** The strike logs that still count (dated after the agent's latest pardon), for checks 5 and 6. */
   strikes: Map<string, string[]>;
+  /** Each pardoned agent's latest pardon date (`YYYY-MM-DD`). */
+  pardonedAt: Map<string, string>;
   unattributed: string[];
 }
 
-/** Groups audit-hall records by the agent they are about. */
+/**
+ * Groups audit-hall records by the agent they are about, and applies pardons: a strike log
+ * dated on or before the agent's latest pardon no longer counts. A strike log without a
+ * valid date always counts (it cannot be shown to be covered).
+ */
 export function indexAuditLogs(
   audits: { record: ArchiveRecord; subject: string | null }[],
 ): AuditIndex {
   const bySubject = new Map<string, string[]>();
-  const strikes = new Map<string, string[]>();
+  const pardonedAt = new Map<string, string>();
+  const strikeLogs: { slug: string; path: string; date: string | null }[] = [];
   const unattributed: string[] = [];
   const push = (map: Map<string, string[]>, key: string, path: string) => {
-    map.set(key, [...(map.get(key) ?? []), path]);
+    if (!(map.get(key) ?? []).includes(path)) map.set(key, [...(map.get(key) ?? []), path]);
   };
+
   for (const { record, subject } of audits) {
+    const { header } = record;
+    if (isPardonLog(header)) {
+      const slugs = pardonedSlugs(header);
+      if (slugs.length === 0 || header.date === null) {
+        unattributed.push(record.path);
+        continue;
+      }
+      for (const slug of slugs) {
+        push(bySubject, slug, record.path);
+        const latest = pardonedAt.get(slug);
+        if (latest === undefined || header.date > latest) pardonedAt.set(slug, header.date);
+      }
+      continue;
+    }
     if (subject === null) {
       unattributed.push(record.path);
       continue;
     }
     const slug = slugOf(subject);
     push(bySubject, slug, record.path);
-    if (isStrikeLog(record.header)) push(strikes, slug, record.path);
+    if (isStrikeLog(header)) strikeLogs.push({ slug, path: record.path, date: header.date });
   }
-  return { bySubject, strikes, unattributed };
+
+  const strikes = new Map<string, string[]>();
+  for (const { slug, path, date } of strikeLogs) {
+    const pardon = pardonedAt.get(slug);
+    // ISO dates compare as strings. "On or before the pardon's date" is covered.
+    const covered = pardon !== undefined && date !== null && date <= pardon;
+    if (!covered) push(strikes, slug, path);
+  }
+  return { bySubject, strikes, pardonedAt, unattributed };
 }
+

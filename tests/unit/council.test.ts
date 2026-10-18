@@ -41,6 +41,7 @@ function agent(name: string, partial: Partial<Agent> = {}): Agent {
     lastEnd: null,
     stage: null,
     auditLogs: [],
+    pardonedAt: null,
     recentEvents: [],
     ...partial,
   };
@@ -143,7 +144,7 @@ describe('agentLines', () => {
 describe('rank and tiers in words', () => {
   it('names the place of each rank', () => {
     expect(rankLabel({ rank: 'overseer', station: null })).toBe('Overseer of The Council');
-    expect(rankLabel({ rank: 'counsel', station: null })).toBe('Counsel to The Council');
+    expect(rankLabel({ rank: 'counsel', station: null })).toBe('Advisor to The Council');
     expect(rankLabel({ rank: 'worker', station: 'Ship' })).toBe('Serves at Ship');
     expect(rankLabel({ rank: 'worker', station: null })).toMatch(/awaiting a station/);
   });
@@ -151,7 +152,8 @@ describe('rank and tiers in words', () => {
   it('pluralises the overseer tier', () => {
     expect(tierTitle('overseer', 1)).toBe('The Overseer');
     expect(tierTitle('overseer', 2)).toBe('The Overseers');
-    expect(tierTitle('counsel', 3)).toBe('The Counsel');
+    expect(tierTitle('counsel', 1)).toBe('The Advisor');
+    expect(tierTitle('counsel', 3)).toBe('The Advisors');
   });
 
   it('writes station numerals', () => {

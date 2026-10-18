@@ -200,6 +200,16 @@ describe('snapshot of the clean fixture workstation', () => {
     ]);
     expect(snapshot.pipeline).toEqual([]);
     expect(snapshot.activity).toEqual({ events: [], total: 0, skippedLines: 0 });
+    // A strike for Paul, then a pardon of Paul: the roster's 0 / 3 is right (checks 5, 6 pass).
+    const paul = snapshot.agents.find((a) => a.slug === 'paul');
+    expect(paul).toMatchObject({ strikes: 0, pardonedAt: '2026-10-02' });
+    expect(paul?.auditLogs).toEqual([
+      'limforia/audit-hall/2026-10-01-paul-strike.md',
+      'limforia/audit-hall/2026-10-02-pardon.md',
+    ]);
+    const check = (id: string) => snapshot.compliance.checks.find((c) => c.id === id)?.result;
+    expect([check('strike-counts'), check('three-strikes')]).toEqual(['pass', 'pass']);
+    expect(snapshot.agents.find((a) => a.slug === 'michael')?.pardonedAt).toBeNull();
   });
 
   it('sets validUntil to the 5-minute silence mark, then shows the run abandoned', async () => {

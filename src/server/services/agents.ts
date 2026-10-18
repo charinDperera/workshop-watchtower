@@ -54,6 +54,8 @@ export interface AgentJoinInput {
   live: Map<string, LiveState>;
   /** Audit-hall record paths keyed by agent slug. */
   auditLogs: Map<string, string[]>;
+  /** Each pardoned agent's latest pardon date (optional). */
+  pardonedAt?: Map<string, string>;
   /** Each agent's newest events, newest first, keyed by agent slug. */
   recentEvents: Map<string, ActivityEvent[]>;
 }
@@ -97,6 +99,7 @@ export function joinAgents(input: AgentJoinInput): Agent[] {
       lastEnd: live?.lastEnd ?? null,
       stage: stageOf(entry),
       auditLogs: input.auditLogs.get(slug) ?? [],
+      pardonedAt: input.pardonedAt?.get(slug) ?? null,
       recentEvents: input.recentEvents.get(slug) ?? [],
     };
   };
