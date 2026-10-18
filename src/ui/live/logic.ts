@@ -65,25 +65,48 @@ export type LifecycleAction = 'suspend' | 'resume' | 'none';
 export interface LifecycleState {
   /** Islands sharing the stream. */
   users: number;
-  /** True after a `pagehide` closed the stream on purpose. */
+  /** True after `beforeunload` or `pagehide` closed the stream on purpose. */
   suspended: boolean;
 }
 
 /**
- * What the live layer does on a page lifecycle event. On `pagehide` it closes the stream
- * itself (`suspend`), so a navigation never tears down an open EventSource (WebKit reports
- * that as an access-control page error) and the close is never mistaken for a lost
- * connection. On a `pageshow` from the back/forward cache (`persisted`) it reopens what it
- * suspended (`resume`). A fresh load (`persisted` false) needs nothing: the islands mount.
+ * What the live layer does on a page lifecycle event.
+ *
+ * - `beforeunload` and `pagehide`: close the stream itself (`suspend`), so a navigation never
+ *   tears down an open EventSource and the close is never mistaken for a lost connection.
+ *   `beforeunload` is the one that matters in WebKit: it cancels the old page's loads before
+ *   `pagehide` fires and reports that as an "access control checks" page error.
+ * - `pageshow` from the back/forward cache (`persisted`): reopen what was suspended
+ *   (`resume`). A fresh load (`persisted` false) needs nothing: the islands mount.
  */
 export function lifecycleAction(
-  type: 'pagehide' | 'pageshow',
+  type: 'beforeunload' | 'pagehide' | 'pageshow',
   persisted: boolean,
   state: LifecycleState,
 ): LifecycleAction {
   if (state.users === 0) return 'none';
-  if (type === 'pagehide') return state.suspended ? 'none' : 'suspend';
-  return persisted && state.suspended ? 'resume' : 'none';
+  if (type === 'pageshow') return persisted && state.suspended ? 'resume' : 'none';
+  return state.suspended ? 'none' : 'suspend';
+}
+
+/**
+ * How long after `beforeunload` the page must still be here before the navigation counts
+ * as cancelled (a download link, a cancelled prompt) and the stream reopens. A real
+ * navigation hides the page well within it.
+ */
+export const CANCELLED_NAVIGATION_MS = 2_000;
+
+/**
+ * After `beforeunload` suspended the stream: reopen it only if the page never went away
+ * (no `pagehide` since) and is still shown, and islands still use the stream.
+ */
+export function resumeAfterCancelledNavigation(state: {
+  users: number;
+  suspended: boolean;
+  hiddenSinceSuspend: boolean;
+  visible: boolean;
+}): boolean {
+  return state.users > 0 && state.suspended && !state.hiddenSinceSuspend && state.visible;
 }
 
 /* ------------------------------------------------------------------ */

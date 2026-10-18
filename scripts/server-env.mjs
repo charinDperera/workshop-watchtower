@@ -75,11 +75,46 @@ export function findAppDir(start) {
   }
 }
 
+/** This app's folder (where package.json is), from a module inside it. */
+export function appDir(moduleUrl = import.meta.url) {
+  return (
+    findAppDir(dirname(fileURLToPath(moduleUrl))) ?? findAppDir(process.cwd()) ?? process.cwd()
+  );
+}
+
+/**
+ * WATCHTOWER_DIST_DIR: where `astro build` writes and `scripts/start.mjs` serves from
+ * (`<dir>/server/entry.mjs`, `<dir>/client/`). Relative paths resolve against the app
+ * folder, so the build, the server and Playwright agree whatever their working directory.
+ * Default: `<app>/dist`. Read on its own by astro.config.mjs (a build needs no workstation)
+ * and as part of `readServerEnv`; this is the one parser of the variable.
+ * @param {Record<string, string | undefined>} env
+ */
+export function readDistDir(env, moduleUrl = import.meta.url) {
+  const raw = typeof env.WATCHTOWER_DIST_DIR === 'string' ? env.WATCHTOWER_DIST_DIR.trim() : '';
+  const app = appDir(moduleUrl);
+  if (raw === '') return join(app, 'dist');
+  if (raw.includes('\0')) {
+    throw new ServerEnvError([
+      { variable: 'WATCHTOWER_DIST_DIR', problem: 'must be a folder path' },
+    ]);
+  }
+  const dir = isAbsolute(raw) ? raw : resolve(app, raw);
+  if (isSameOrAncestor(dir, app)) {
+    // astro build empties outDir: never the app folder itself or anything above it.
+    throw new ServerEnvError([
+      {
+        variable: 'WATCHTOWER_DIST_DIR',
+        problem: 'must not be the app folder or a folder above it',
+      },
+    ]);
+  }
+  return dir;
+}
+
 /** The default workstation root: the folder two levels above the app. */
 export function defaultRoot(moduleUrl = import.meta.url) {
-  const appDir =
-    findAppDir(dirname(fileURLToPath(moduleUrl))) ?? findAppDir(process.cwd()) ?? process.cwd();
-  return resolve(appDir, '..', '..');
+  return resolve(appDir(moduleUrl), '..', '..');
 }
 
 const isDirectory = (path) => {
@@ -186,6 +221,7 @@ const schema = z
     WATCHTOWER_POLL_MS: optional(integer(POLL_MIN_MS, POLL_MAX_MS)),
     LOG_LEVEL: optional(z.enum(LOG_LEVELS, { error: `must be one of ${LOG_LEVELS.join(', ')}` })),
     LOG_DIR: optional(z.string()),
+    WATCHTOWER_DIST_DIR: optional(z.string()),
     WATCHTOWER_PUBLIC_ORIGIN: optional(
       z.string().transform((text, ctx) => {
         const origin = parsePublicOrigin(text);
@@ -266,6 +302,7 @@ export function readServerEnv(env, options = {}) {
     logLevel: v.LOG_LEVEL ?? 'info',
     logDir,
     publicOrigin: v.WATCHTOWER_PUBLIC_ORIGIN ?? null,
+    distDir: readDistDir(env, options.moduleUrl),
   });
 }
 

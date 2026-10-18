@@ -5,6 +5,7 @@ import svelte from '@astrojs/svelte';
 import tailwindcss from '@tailwindcss/vite';
 import { fileURLToPath } from 'node:url';
 import { inlineScriptHashes } from './scripts/inline-script-hashes.mjs';
+import { readDistDir } from './scripts/server-env.mjs';
 
 // The Watchtower is local only (SPEC section 1). `server` applies to `astro dev`.
 // Production runs through `scripts/start.mjs` (`pnpm start`), which owns the HTTP server: the
@@ -22,6 +23,8 @@ import { inlineScriptHashes } from './scripts/inline-script-hashes.mjs';
 //   is CSS injection through an attribute, and those values are numbers.
 export default defineConfig({
   output: 'server',
+  // WATCHTOWER_DIST_DIR (default ./dist): the same parser start.mjs serves from.
+  outDir: readDistDir(process.env),
   adapter: node({ mode: 'middleware' }),
   server: { host: '127.0.0.1', port: 4321 },
   integrations: [svelte()],

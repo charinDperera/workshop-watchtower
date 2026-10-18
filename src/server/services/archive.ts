@@ -147,4 +147,3 @@ export function indexAuditLogs(
   }
   return { bySubject, strikes, pardonedAt, unattributed };
 }
-

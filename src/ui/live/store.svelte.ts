@@ -11,10 +11,12 @@ import {
   AnnouncementQueue,
   BACKOFF,
   backoffDelay,
+  CANCELLED_NAVIGATION_MS,
   describeChanges,
   LIVE_ACTIVITY_CAP,
   lifecycleAction,
   mergeEvents,
+  resumeAfterCancelledNavigation,
 } from './logic';
 
 export type ConnectionState = 'connecting' | 'live' | 'reconnecting' | 'disconnected';
@@ -82,8 +84,15 @@ let source: EventSource | null = null;
 let attempt = 0;
 let retryTimer: ReturnType<typeof setTimeout> | null = null;
 let lostAnnounced = false;
-/** Closed on purpose by `pagehide`: not a lost connection, so nothing reconnects or announces. */
+/**
+ * Closed on purpose by `beforeunload` or `pagehide`: not a lost connection, so nothing
+ * reconnects or announces.
+ */
 let suspended = false;
+/** The page went away (`pagehide`) after the suspend: the navigation was not cancelled. */
+let hiddenSinceSuspend = false;
+/** Reopens the stream if a navigation announced by `beforeunload` never happened. */
+let cancelTimer: ReturnType<typeof setTimeout> | null = null;
 
 const queue = new AnnouncementQueue();
 let announceTimer: ReturnType<typeof setTimeout> | null = null;
@@ -229,20 +238,57 @@ function onOffline(): void {
   live.connection = 'disconnected';
 }
 
-/** `pagehide`: close the stream ourselves before the page goes (or enters the bfcache). */
-function onPageHide(event: PageTransitionEvent): void {
-  if (lifecycleAction('pagehide', event.persisted, { users, suspended }) !== 'suspend') return;
+function clearCancelTimer(): void {
+  if (cancelTimer) clearTimeout(cancelTimer);
+  cancelTimer = null;
+}
+
+/** Close the stream ourselves: no retry, no state change, no announcement. */
+function suspend(): void {
   suspended = true;
   clearRetry();
   closeSource();
 }
 
-/** `pageshow` from the bfcache: reopen what `pagehide` closed, quietly, with a fresh backoff. */
-function onPageShow(event: PageTransitionEvent): void {
-  if (lifecycleAction('pageshow', event.persisted, { users, suspended }) !== 'resume') return;
+/** Reopen what `suspend` closed, quietly, with a fresh backoff. */
+function resume(): void {
   suspended = false;
+  hiddenSinceSuspend = false;
   attempt = 0;
   open({ quiet: true });
+}
+
+/**
+ * `beforeunload`: a navigation is starting. Close the stream now, before the browser cancels
+ * it (WebKit does that before `pagehide` and reports a page error). If the page is still
+ * here a moment later, the navigation was cancelled and the stream reopens.
+ */
+function onBeforeUnload(): void {
+  if (lifecycleAction('beforeunload', false, { users, suspended }) !== 'suspend') return;
+  suspend();
+  hiddenSinceSuspend = false;
+  clearCancelTimer();
+  cancelTimer = setTimeout(() => {
+    cancelTimer = null;
+    const visible = document.visibilityState === 'visible';
+    if (resumeAfterCancelledNavigation({ users, suspended, hiddenSinceSuspend, visible })) {
+      resume();
+    }
+  }, CANCELLED_NAVIGATION_MS);
+}
+
+/** `pagehide`: the page goes (or enters the bfcache). Close the stream if still open. */
+function onPageHide(event: PageTransitionEvent): void {
+  hiddenSinceSuspend = true;
+  clearCancelTimer();
+  if (lifecycleAction('pagehide', event.persisted, { users, suspended }) !== 'suspend') return;
+  suspend();
+}
+
+/** `pageshow` from the bfcache: reopen what was suspended. */
+function onPageShow(event: PageTransitionEvent): void {
+  if (lifecycleAction('pageshow', event.persisted, { users, suspended }) !== 'resume') return;
+  resume();
 }
 
 /**
@@ -254,9 +300,11 @@ export function useLive(): () => void {
   if (users === 1) {
     window.addEventListener('online', onOnline);
     window.addEventListener('offline', onOffline);
+    window.addEventListener('beforeunload', onBeforeUnload);
     window.addEventListener('pagehide', onPageHide);
     window.addEventListener('pageshow', onPageShow);
     suspended = false;
+    hiddenSinceSuspend = false;
     open();
   }
   return () => {
@@ -264,9 +312,12 @@ export function useLive(): () => void {
     if (users > 0) return;
     window.removeEventListener('online', onOnline);
     window.removeEventListener('offline', onOffline);
+    window.removeEventListener('beforeunload', onBeforeUnload);
     window.removeEventListener('pagehide', onPageHide);
     window.removeEventListener('pageshow', onPageShow);
+    clearCancelTimer();
     suspended = false;
+    hiddenSinceSuspend = false;
     closeSource();
     clearRetry();
   };

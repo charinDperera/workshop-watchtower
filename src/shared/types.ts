@@ -113,7 +113,8 @@ export interface ActivityPage {
 
 /**
  * Place in The Council's hierarchy, from the roster's Rank column: the `overseer` leads and
- * oversees all, `counsel` advises from outside the Order of Work, `worker` serves on it.
+ * oversees all, `counsel` advises from outside the Order of Work (the roster says `Advisor`,
+ * or `Counsel` in older rosters), `worker` serves on it.
  */
 export type AgentRank = 'overseer' | 'counsel' | 'worker';
 

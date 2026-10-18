@@ -9,7 +9,9 @@
 // On the host it listens on 127.0.0.1 only (SPEC section 1); only container mode
 // (WATCHTOWER_CONTAINER=1) honours HOST. PORT is configurable in both (default 4321).
 import { createServer } from 'node:http';
-import { fileURLToPath } from 'node:url';
+import { existsSync } from 'node:fs';
+import { join } from 'node:path';
+import { pathToFileURL } from 'node:url';
 import pkg from '../package.json' with { type: 'json' };
 import { createRequestListener } from './http-server.mjs';
 import { createLogger } from './logger.mjs';
@@ -39,10 +41,18 @@ const { system, forRequest } = createLogger({
   logDir: settings.logDir,
 });
 
-const { handler } = await import('../dist/server/entry.mjs');
+// The build to serve: WATCHTOWER_DIST_DIR (default ./dist), the same folder astro build wrote.
+const entry = join(settings.distDir, 'server', 'entry.mjs');
+if (!existsSync(entry)) {
+  system.fatal('server.no_build', 'No build to serve: run pnpm build first', {
+    variable: 'WATCHTOWER_DIST_DIR',
+  });
+  process.exit(1);
+}
+const { handler } = await import(pathToFileURL(entry).href);
 const listener = createRequestListener({
   policy: createRequestPolicy(settings),
-  serveStatic: createStaticHandler(fileURLToPath(new URL('../dist/client/', import.meta.url))),
+  serveStatic: createStaticHandler(join(settings.distDir, 'client')),
   app: handler,
   logger: { forRequest },
 });

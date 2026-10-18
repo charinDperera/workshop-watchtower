@@ -31,6 +31,8 @@ export interface ServerEnv {
   readonly logDir: string;
   /** WATCHTOWER_PUBLIC_ORIGIN: the gateway's origin (e.g. https://dev-watchtower.workshop.io). */
   readonly publicOrigin: string | null;
+  /** WATCHTOWER_DIST_DIR: the build to serve (`<dir>/server`, `<dir>/client`). */
+  readonly distDir: string;
 }
 
 /** Kept for the guard's signature: the policy needs these fields of the config. */

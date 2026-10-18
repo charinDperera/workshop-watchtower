@@ -21,7 +21,18 @@ export function parseStrikes(text: string): { strikes: number | null; limit: num
   return { strikes: Number(match[1]), limit: Number(match[2]) };
 }
 
-const RANKS: readonly AgentRank[] = ['overseer', 'counsel', 'worker'];
+/**
+ * Rank keywords of the roster's Rank column (case-insensitive). `Advisor` is the canonical
+ * word for the tier outside the Order of Work; `Counsel`, its old name, is kept as an alias
+ * so older rosters still read. Both map to the internal rank `counsel` (kept, so the UI
+ * that reads `rank === 'counsel'` needs no change).
+ */
+export const RANK_KEYWORDS: Readonly<Record<string, AgentRank>> = Object.freeze({
+  overseer: 'overseer',
+  advisor: 'counsel',
+  counsel: 'counsel',
+  worker: 'worker',
+});
 /** Placeholders the roster uses for "none". */
 const NONE = /^(?:—|–|-)?$/;
 
@@ -38,7 +49,9 @@ export function optionalCell(text: string): string | null {
 export function parseRank(text: string): { rank: AgentRank; unknown: boolean } {
   const value = optionalCell(text);
   if (value === null) return { rank: 'worker', unknown: false };
-  const rank = RANKS.find((r) => r === value.toLowerCase());
+  const rank = Object.hasOwn(RANK_KEYWORDS, value.toLowerCase())
+    ? RANK_KEYWORDS[value.toLowerCase()]
+    : undefined;
   return rank ? { rank, unknown: false } : { rank: 'worker', unknown: true };
 }
 

@@ -1,7 +1,9 @@
 # The Watchtower
 
 A local live dashboard of the workstation (`F:\Projects`). It reads the workstation
-read-only and is served on `http://localhost:4321/` only. See `SPEC.md` and ADR-002.
+read-only. It is served at `https://dev-watchtower.workshop.io` through the workstation
+gateway (`infra/gateway`, in Docker), and for local development with `pnpm start` on
+`http://127.0.0.1:4321/`. See `SPEC.md` and ADR-002.
 
 ## Running it
 

@@ -94,10 +94,10 @@ test.describe('the Council tree on /host', () => {
     if (!overseer || !hand || !tree || !label) throw new Error('the tree did not render');
     const centreY = (b: { y: number; height: number }) => b.y + b.height / 2;
     const centreX = (b: { x: number; width: number }) => b.x + b.width / 2;
-    // Lower by a step (about a third of its seal), but less than half its frame: still at his hand.
+    // Lower by a step (about a third of its seal): 20 to 60 px at 1440, still at his hand.
     const drop = centreY(hand) - centreY(overseer);
-    expect(drop).toBeGreaterThanOrEqual(16);
-    expect(drop).toBeLessThan(hand.height / 2);
+    expect(drop).toBeGreaterThanOrEqual(20);
+    expect(drop).toBeLessThanOrEqual(60);
     expect(centreX(hand)).toBeGreaterThan(centreX(overseer));
     expect(Math.abs(centreX(label) - centreX(hand))).toBeLessThanOrEqual(2);
     expect(Math.abs(centreX(overseer) - centreX(tree))).toBeLessThanOrEqual(2);

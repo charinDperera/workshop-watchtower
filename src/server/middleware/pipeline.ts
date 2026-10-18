@@ -29,9 +29,30 @@ function currentPolicy(): GuardPolicy | null {
   return policy;
 }
 
+export interface PipelineOptions {
+  /**
+   * Rethrow a page's render error to Astro (dev: keeps the error overlay). In production it
+   * is logged here once, with its stack, and answered with a plain 500, so Astro does not
+   * print its own unstructured copy.
+   */
+  rethrowRenderErrors?: boolean;
+}
+
+/** The body of a page that failed to render: no detail (the log has it). */
+export function renderFailure(): Response {
+  return new Response(
+    '<!doctype html><title>Something went wrong</title><p>Something went wrong on this page. Please try again.</p>',
+    {
+      status: 500,
+      headers: { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' },
+    },
+  );
+}
+
 export async function handleRequest(
   context: PipelineContext,
   next: () => Promise<Response>,
+  options: PipelineOptions = { rethrowRenderErrors: import.meta.env.DEV },
 ): Promise<Response> {
   const started = performance.now();
   const { requestId, log } = attachRequestContext(context);
@@ -57,7 +78,18 @@ export async function handleRequest(
       active,
     );
     if (verdict.allow) {
-      response = await next();
+      try {
+        response = await next();
+      } catch (err) {
+        // A page threw while rendering (API routes handle their own errors in route()).
+        if (options.rethrowRenderErrors) throw err;
+        log.error('request.failed', 'Page render failed', {
+          route: context.routePattern ?? context.url.pathname,
+          status: 500,
+          err,
+        });
+        response = renderFailure();
+      }
     } else {
       if (verdict.log) log.warn('request.refused', verdict.log, { status: verdict.status });
       response = errorResponse(verdict.status, verdict.error);

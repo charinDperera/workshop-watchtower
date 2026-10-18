@@ -138,6 +138,28 @@ describe('registers', () => {
     ]);
   });
 
+  it('reads the Advisor rank, and Counsel as its old alias, as the counsel tier', () => {
+    const md = [
+      '| Name | Title | Rank | Station | Role | Tools | Created | Strikes |',
+      '|---|---|---|---|---|---|---|---|',
+      '| Uriel | The Wizard | Advisor | — | Research | Read | 2026-10-18 | 0 / 3 |',
+      '| Old | — | Counsel | — | Research | Read | 2026-10-16 | 0 / 3 |',
+      '| Loud | — | ADVISOR | — | Research | Read | 2026-10-18 | 0 / 3 |',
+      '| Proto | — | constructor | — | Research | Read | 2026-10-18 | 0 / 3 |',
+    ].join('\n');
+    const r = parseRoster(md);
+    expect(r.items.map((e) => [e.name, e.rank])).toEqual([
+      ['Uriel', 'counsel'],
+      ['Old', 'counsel'],
+      ['Loud', 'counsel'],
+      ['Proto', 'worker'],
+    ]);
+    // Only the unknown keyword is reported (an inherited object key is not a rank).
+    expect(r.problems.map((p) => p.message)).toEqual([
+      'Unknown rank for Proto: "constructor" (treated as Worker)',
+    ]);
+  });
+
   it('infers the overseer from the role only in a legacy roster without a Rank column', () => {
     const legacy =
       '| Name | Role | Tools | Created | Strikes |\n|---|---|---|---|---|\n| Michael | Main agent: leads | All | 2026-10-16 | 0 / 3 |';

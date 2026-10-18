@@ -15,6 +15,7 @@ import {
   createClientMatcher,
   parseAllowedHost,
   parseClientEntry,
+  readDistDir,
   readServerEnv,
   ServerEnvError,
   summariseServerEnv,
@@ -58,6 +59,7 @@ describe('server settings from the environment (the one validator)', () => {
       logLevel: 'info',
       logDir: join(ROOT_DEFAULT, 'limforia', 'logs', 'watchtower'),
       publicOrigin: null,
+      distDir: join(APP_DIR, 'dist'),
     });
     expect(Object.isFrozen(settings)).toBe(true);
   });
@@ -373,6 +375,35 @@ describe('behind the workstation gateway (WATCHTOWER_PUBLIC_ORIGIN)', () => {
         createRequestPolicy(readServerEnv({}) as ServerEnv),
       ),
     ).toMatchObject({ allow: false });
+  });
+});
+
+describe('WATCHTOWER_DIST_DIR (a separate build per user, e.g. e2e)', () => {
+  it('defaults to <app>/dist, and resolves relative paths against the app folder', () => {
+    expect(readDistDir({})).toBe(join(APP_DIR, 'dist'));
+    expect(readDistDir({ WATCHTOWER_DIST_DIR: '  ' })).toBe(join(APP_DIR, 'dist'));
+    expect(readDistDir({ WATCHTOWER_DIST_DIR: '.local/peter/e2e/dist' })).toBe(
+      join(APP_DIR, '.local', 'peter', 'e2e', 'dist'),
+    );
+    const temp = makeTempDir('dist-');
+    try {
+      expect(readDistDir({ WATCHTOWER_DIST_DIR: temp.dir })).toBe(temp.dir);
+      // The full config carries the same value.
+      expect(readServerEnv({ WATCHTOWER_DIST_DIR: temp.dir }).distDir).toBe(temp.dir);
+    } finally {
+      temp.cleanup();
+    }
+  });
+
+  it('refuses the app folder or anything above it (astro build empties outDir)', () => {
+    for (const value of ['.', '..', APP_DIR, join(APP_DIR, '..', '..')]) {
+      const result = loadEnv({ WATCHTOWER_DIST_DIR: value });
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.variables).toEqual(['WATCHTOWER_DIST_DIR']);
+        expect(result.error).toContain('must not be the app folder or a folder above it');
+      }
+    }
   });
 });
 
