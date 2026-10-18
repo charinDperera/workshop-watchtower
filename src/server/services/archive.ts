@@ -66,8 +66,9 @@ export function crossCheckCatalog(
 /**
  * Audit log outcomes the workstation uses (the `outcome` key of an audit log's header).
  * An audit log without an outcome is a strike. Other values are kept but count as nothing.
+ * `note`: an error recorded during the building stage, by the User's ruling: no strike.
  */
-export const AUDIT_OUTCOMES = ['strike', 'executed', 'dismissed', 'pardon'] as const;
+export const AUDIT_OUTCOMES = ['strike', 'executed', 'dismissed', 'pardon', 'note'] as const;
 
 /** Audit logs that count as strikes: outcome `strike` or `executed` (or none). */
 export function isStrikeLog(header: RecordHeader): boolean {

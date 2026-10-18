@@ -456,6 +456,44 @@ describe('archive', () => {
   });
 });
 
+describe('building-stage notes (outcome: note)', () => {
+  // The header of limforia/audit-hall/2026-10-18-luke-premature-webkit-claim.md.
+  const note = parseRecord(
+    'limforia/audit-hall/2026-10-18-luke-premature-webkit-claim.md',
+    [
+      '---',
+      'type: audit',
+      'date: 2026-10-18',
+      'agents: [Luke]',
+      'tags: [false-claim, webkit, watchtower, building-stage]',
+      'status: closed',
+      'outcome: note',
+      '---',
+      '',
+      '# Audit Log: Luke, a premature claim that the WebKit allowance could be dropped',
+    ].join('\n'),
+  );
+
+  it('is a known outcome with a valid header and no header problem', () => {
+    expect(AUDIT_OUTCOMES).toContain('note');
+    expect(note.header.extra.outcome).toBe('note');
+    expect(note.headerValid).toBe(true);
+    expect(note.headerProblems).toEqual([]);
+  });
+
+  it('is not a strike: filed under the agent, but never counted', () => {
+    expect(isStrikeLog(note.header)).toBe(false);
+    expect(isPardonLog(note.header)).toBe(false);
+    const index = indexAuditLogs([{ record: note, subject: 'Luke' }]);
+    expect(index.bySubject.get('luke')).toEqual([note.path]);
+    expect(index.strikes.get('luke')).toBeUndefined();
+    const counts = checkStrikeCounts(
+      input({ roster: roster([['Luke', 'Interface', 0]]), strikeLogs: index.strikes }),
+    );
+    expect(counts.result).toBe('pass');
+  });
+});
+
 describe('pardons', () => {
   /** An audit log with a real header (parsed like the archive). */
   const log = (name: string, header: string) =>

@@ -1,6 +1,7 @@
 import { defineConfig, devices } from '@playwright/test';
 import {
   E2E_HOST,
+  E2E_DIST_DIR,
   E2E_LOG_DIR,
   E2E_PORT,
   GATEWAY_LOCAL_HOST,
@@ -46,10 +47,15 @@ function serverEnv(o: { port: number; logDir: string; publicOrigin: string }) {
     WATCHTOWER_ALLOWED_HOSTS: `127.0.0.1:${o.port},localhost:${o.port}`,
     WATCHTOWER_POLL_MS: '',
     WATCHTOWER_PUBLIC_ORIGIN: o.publicOrigin,
+    // Both servers build into (the first) and serve from the private e2e build.
+    WATCHTOWER_DIST_DIR: E2E_DIST_DIR,
     LOG_LEVEL: 'info',
     LOG_DIR: o.logDir,
   };
 }
+
+/** The render-error spec, kept to its own project (see `projects`). */
+const RENDER_ERROR_SPEC = /zz-render-error\.live\.spec\.ts$/;
 
 export default defineConfig({
   testDir: './tests/e2e',
@@ -65,9 +71,16 @@ export default defineConfig({
     trace: 'retain-on-failure',
   },
   projects: [
-    { name: 'chromium', use: { ...devices['Desktop Chrome'] } },
-    { name: 'firefox', use: { ...devices['Desktop Firefox'] } },
-    { name: 'webkit', use: { ...devices['Desktop Safari'] } },
+    // First, and best run on its own (`--project=render-error`): it hides a page module, which
+    // only fails if this server process has not loaded that page yet (Node caches modules).
+    {
+      name: 'render-error',
+      use: { ...devices['Desktop Chrome'] },
+      testMatch: RENDER_ERROR_SPEC,
+    },
+    { name: 'chromium', use: { ...devices['Desktop Chrome'] }, testIgnore: RENDER_ERROR_SPEC },
+    { name: 'firefox', use: { ...devices['Desktop Firefox'] }, testIgnore: RENDER_ERROR_SPEC },
+    { name: 'webkit', use: { ...devices['Desktop Safari'] }, testIgnore: RENDER_ERROR_SPEC },
   ],
   webServer: [
     {
@@ -78,7 +91,7 @@ export default defineConfig({
       env: serverEnv({ port: E2E_PORT, logDir: E2E_LOG_DIR, publicOrigin: '' }),
     },
     {
-      // No build of its own: it must not rewrite dist/ while the first server builds. If
+      // No build of its own: it serves the first server's build (WATCHTOWER_DIST_DIR). If
       // Playwright ever starts the two at once, this one fails to start (visible, not silent).
       command: 'pnpm start',
       url: `http://${GATEWAY_LOCAL_HOST}/api/health`,

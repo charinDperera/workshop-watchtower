@@ -47,6 +47,12 @@ export const PUBLIC_ORIGIN = 'https://watchtower.e2e.test';
 export const PUBLIC_HOST = 'watchtower.e2e.test';
 export const GATEWAY_LOG_DIR = join(E2E_BASE, 'logs-gateway');
 
+/**
+ * The e2e build (WATCHTOWER_DIST_DIR): built once by the first server, served by both. Apart
+ * from the app's `dist/`, so other agents' builds can never swap files under a running e2e.
+ */
+export const E2E_DIST_DIR = join(E2E_BASE, 'dist');
+
 /** Older events seeded into the rotated log: Uriel searching, two per second apart. */
 export const SEEDED_EVENTS = 60;
 export const SEEDED_AGENT = 'uriel';

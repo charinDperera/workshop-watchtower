@@ -11,10 +11,12 @@ import { join } from 'node:path';
 import type { ApiError, RenderedRecord } from '../../src/shared/types';
 import { expect, test } from './support/test';
 import {
+  E2E_DIST_DIR,
   E2E_HOST,
   E2E_LOG_DIR,
   E2E_PORT,
   e2eRoot,
+  GATEWAY_LOCAL_HOST,
   hasEscapeJunction,
   OUTSIDE_SECRET,
 } from './support/workstation';
@@ -606,5 +608,29 @@ test.describe('SSE stream', () => {
     });
     expect(text).toContain('retry: 3000');
     expect(text).toMatch(/event: snapshot\ndata: \{/);
+  });
+});
+
+/* ------------------------------------------------------------------ */
+/* The private e2e build                                               */
+/* ------------------------------------------------------------------ */
+
+test.describe('WATCHTOWER_DIST_DIR', () => {
+  test('both e2e servers serve the private build in .local/peter/e2e/dist', async () => {
+    expect(existsSync(join(E2E_DIST_DIR, 'server', 'entry.mjs'))).toBe(true);
+    const html = (await rawGet('/')).body;
+    const assets = [...html.matchAll(/["'](\/_astro\/[^"'?#]+)["']/g)].map((m) => m[1] ?? '');
+    expect(assets.length).toBeGreaterThan(0);
+    for (const asset of assets) {
+      expect(existsSync(join(E2E_DIST_DIR, 'client', ...asset.split('/'))), asset).toBe(true);
+    }
+    // The gateway server answers from the same build.
+    const gateway = await fetch('http://' + GATEWAY_LOCAL_HOST + '/');
+    expect(gateway.status).toBe(200);
+    const gatewayAssets = [...(await gateway.text()).matchAll(/["'](\/_astro\/[^"'?#]+)["']/g)];
+    expect(gatewayAssets.length).toBeGreaterThan(0);
+    for (const asset of gatewayAssets.map((m) => m[1] ?? '')) {
+      expect(existsSync(join(E2E_DIST_DIR, 'client', ...asset.split('/'))), asset).toBe(true);
+    }
   });
 });
