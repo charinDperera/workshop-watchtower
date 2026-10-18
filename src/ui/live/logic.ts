@@ -57,6 +57,36 @@ export function backoffDelay(attempt: number, random: () => number = Math.random
 }
 
 /* ------------------------------------------------------------------ */
+/* Page lifecycle: an intentional close, not a lost connection        */
+/* ------------------------------------------------------------------ */
+
+export type LifecycleAction = 'suspend' | 'resume' | 'none';
+
+export interface LifecycleState {
+  /** Islands sharing the stream. */
+  users: number;
+  /** True after a `pagehide` closed the stream on purpose. */
+  suspended: boolean;
+}
+
+/**
+ * What the live layer does on a page lifecycle event. On `pagehide` it closes the stream
+ * itself (`suspend`), so a navigation never tears down an open EventSource (WebKit reports
+ * that as an access-control page error) and the close is never mistaken for a lost
+ * connection. On a `pageshow` from the back/forward cache (`persisted`) it reopens what it
+ * suspended (`resume`). A fresh load (`persisted` false) needs nothing: the islands mount.
+ */
+export function lifecycleAction(
+  type: 'pagehide' | 'pageshow',
+  persisted: boolean,
+  state: LifecycleState,
+): LifecycleAction {
+  if (state.users === 0) return 'none';
+  if (type === 'pagehide') return state.suspended ? 'none' : 'suspend';
+  return persisted && state.suspended ? 'resume' : 'none';
+}
+
+/* ------------------------------------------------------------------ */
 /* Change detection for announcements                                 */
 /* ------------------------------------------------------------------ */
 

@@ -1,6 +1,9 @@
 # gitleaks configuration for The Watchtower. Run from the app folder:
 #   gitleaks dir . --config .gitleaks.toml --redact
 # The default rules apply; the allowlist only skips paths that must not or need not be scanned.
+# Skipping a path before it is read was verified with gitleaks 8.30.1, hence minVersion.
+
+minVersion = "v8.30.1"
 
 [extend]
 useDefault = true
@@ -9,16 +12,17 @@ useDefault = true
 description = "Skip dependencies, caches, build output and real environment files"
 paths = [
   # Dependencies, the pnpm store, local caches and build output.
-  '''(^|[\/])node_modules([\/]|$)''',
-  '''(^|[\/])\.pnpm-store([\/]|$)''',
-  '''(^|[\/])\.local([\/]|$)''',
-  '''(^|[\/])dist([\/]|$)''',
-  '''(^|[\/])\.astro([\/]|$)''',
+  '''(^|[\\/])node_modules([\\/]|$)''',
+  '''(^|[\\/])\.pnpm-store([\\/]|$)''',
+  '''(^|[\\/])\.local([\\/]|$)''',
+  '''(^|[\\/])dist([\\/]|$)''',
+  '''(^|[\\/])\.astro([\\/]|$)''',
   # Real environment files are sealed (Commandment 1, env-management): a scan must never open
-  # them. Go's regexp has no lookahead, so the names are listed explicitly. `.env.example` is
-  # deliberately NOT excluded: it is committed, and scanning it catches real secrets pasted
-  # into it by mistake. Added with the User's explicit one-time permission on 2026-10-17.
-  '''(^|[\/])\.env$''',
-  '''(^|[\/])\.env\.(local|dev|development|prod|production|test|testing|staging|ci)$''',
-  '''(^|[\/])\.env\.[^\/]+\.local$''',
+  # them. These two patterns skip `.env` and EVERY `.env.<anything>` except exactly
+  # `.env.example`, which stays scanned so a real secret pasted into it is caught.
+  # Go's RE2 has no lookahead, so "not exactly example" is spelled out letter by letter.
+  # Both separators are matched, for Windows paths. Tested on 27 stand-in names on 2026-10-18.
+  # Added with the User's explicit one-time permission (2026-10-17); widened after Thomas's review.
+  '''(^|[\\/])\.env$''',
+  '''(^|[\\/])\.env\.([^e\\/][^\\/]*|e|e[^x\\/][^\\/]*|ex|ex[^a\\/][^\\/]*|exa|exa[^m\\/][^\\/]*|exam|exam[^p\\/][^\\/]*|examp|examp[^l\\/][^\\/]*|exampl|exampl[^e\\/][^\\/]*|example[^\\/]+)$''',
 ]

@@ -28,6 +28,7 @@ import { handleRequest } from '../../src/server/middleware/pipeline';
 import { activityQuery } from '../../src/server/schemas/activity-query';
 import {
   assertSameOrigin,
+  localOriginHosts,
   parseClientErrorReport,
   readJsonBody,
   type ClientErrorReport,
@@ -516,13 +517,13 @@ describe('review fixes', () => {
     expect(() =>
       assertSameOrigin(h({ host: '127.0.0.1:4321', origin: 'http://127.0.0.1:4321' }), origin),
     ).not.toThrow();
-    // `http://<Host>` is this server's own origin, so it stays accepted (as specified).
+    // A plain-http page on the public host is a downgrade, not this server's origin: refused.
     expect(() =>
       assertSameOrigin(
         h({ host: 'dev-watchtower.workshop.io', origin: 'http://dev-watchtower.workshop.io' }),
         origin,
       ),
-    ).not.toThrow();
+    ).toThrow('Cross-origin reports are not accepted');
     for (const bad of ['https://evil.test', `${origin}.evil.test`, 'https://workshop.io']) {
       expect(() =>
         assertSameOrigin(h({ host: 'dev-watchtower.workshop.io', origin: bad }), origin),
@@ -530,6 +531,55 @@ describe('review fixes', () => {
     }
     // Without a public origin, the gateway's origin is refused.
     expect(() => assertSameOrigin(h({ host: 'dev-watchtower.workshop.io', origin }))).toThrow();
+  });
+
+  it('refuses the public host over plain http (Peter: watchtower.e2e.test repro)', () => {
+    const origin = 'https://watchtower.e2e.test';
+    const h = (o: Record<string, string>) => new Headers(o);
+    const local = localOriginHosts(['127.0.0.1:4398', 'localhost:4398'], origin);
+    // The repro: Host watchtower.e2e.test, Origin http://watchtower.e2e.test -> 403.
+    expect(() =>
+      assertSameOrigin(
+        h({
+          host: 'watchtower.e2e.test',
+          origin: 'http://watchtower.e2e.test',
+          'sec-fetch-site': 'same-origin',
+        }),
+        origin,
+        local,
+      ),
+    ).toThrow('Cross-origin reports are not accepted');
+    // The public origin itself is accepted, exactly.
+    expect(() =>
+      assertSameOrigin(
+        h({ host: 'watchtower.e2e.test', origin, 'sec-fetch-site': 'same-origin' }),
+        origin,
+        local,
+      ),
+    ).not.toThrow();
+    // Local hosts keep the http://<Host> rule, including WATCHTOWER_ALLOWED_HOSTS and case.
+    for (const host of ['127.0.0.1:4321', 'localhost:4321', '127.0.0.1:4398', 'LocalHost:4398']) {
+      expect(() =>
+        assertSameOrigin(h({ host, origin: `http://${host.toLowerCase()}` }), origin, local),
+      ).not.toThrow();
+    }
+    // An unlisted host never counts as local.
+    expect(() =>
+      assertSameOrigin(h({ host: 'evil.test', origin: 'http://evil.test' }), origin, local),
+    ).toThrow();
+  });
+
+  it('never treats the public host as local, even if WATCHTOWER_ALLOWED_HOSTS lists it', () => {
+    expect(
+      localOriginHosts(['watchtower.e2e.test', '127.0.0.1:4398'], 'https://watchtower.e2e.test'),
+    ).toEqual(['127.0.0.1:4321', 'localhost:4321', '127.0.0.1:4398']);
+    // A public origin with a port excludes exactly host:port.
+    expect(localOriginHosts(['gw.test:8443', 'gw.test'], 'https://gw.test:8443')).toEqual([
+      '127.0.0.1:4321',
+      'localhost:4321',
+      'gw.test',
+    ]);
+    expect(localOriginHosts([], null)).toEqual(['127.0.0.1:4321', 'localhost:4321']);
   });
 
   it('sends the stream with X-Accel-Buffering: no, for the proxy', async () => {

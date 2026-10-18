@@ -4,6 +4,9 @@
  * nothing that looks like a stack trace is accepted.
  */
 import { z } from 'zod';
+import { hostOfOrigin } from '../../../scripts/server-env.mjs';
+import { serverEnv } from '../config/env';
+import { DEFAULT_ALLOWED_HOSTS } from '../security/request-guard';
 import {
   BadRequestError,
   ForbiddenError,
@@ -71,16 +74,36 @@ export function parseClientErrorReport(body: unknown): ClientErrorReport {
 }
 
 /**
- * Same-origin only: the browser's `Origin` must be this server's own origin (the Host
- * header already passed the guard) or exactly WATCHTOWER_PUBLIC_ORIGIN, and
- * `Sec-Fetch-Site`, when sent, must agree.
+ * The Host values for which `http://<Host>` is this server's own origin: the local ones
+ * (`127.0.0.1:<port>`, `localhost:<port>`, WATCHTOWER_ALLOWED_HOSTS), never the public
+ * host. The public host is reached only through WATCHTOWER_PUBLIC_ORIGIN, exactly.
  */
-export function assertSameOrigin(headers: Headers, publicOrigin: string | null = null): void {
-  const host = headers.get('host');
+export function localOriginHosts(
+  allowedHosts: readonly string[],
+  publicOrigin: string | null,
+): string[] {
+  const publicHost = publicOrigin ? hostOfOrigin(publicOrigin) : null;
+  return [...DEFAULT_ALLOWED_HOSTS, ...allowedHosts]
+    .map((h) => h.toLowerCase())
+    .filter((h) => h !== publicHost);
+}
+
+/**
+ * Same-origin only. The browser's `Origin` must be either:
+ * - `http://<Host>` where Host is a LOCAL allowed host (not the public host), or
+ * - exactly WATCHTOWER_PUBLIC_ORIGIN, so a page on `http://<public host>` (a downgrade
+ *   from the https origin) is refused;
+ * and `Sec-Fetch-Site`, when sent, must agree.
+ */
+export function assertSameOrigin(
+  headers: Headers,
+  publicOrigin: string | null = null,
+  localHosts: readonly string[] = localOriginHosts(serverEnv().allowedHosts, publicOrigin),
+): void {
+  const host = headers.get('host')?.trim().toLowerCase() ?? null;
   const origin = headers.get('origin');
   const site = headers.get('sec-fetch-site');
-  // This server's own origin, or exactly the configured public origin (the gateway).
-  const own = host !== null && origin === `http://${host}`;
+  const own = host !== null && localHosts.includes(host) && origin === `http://${host}`;
   const viaGateway = publicOrigin !== null && origin === publicOrigin;
   if (!(own || viaGateway) || (site !== null && site !== 'same-origin')) {
     throw new ForbiddenError('Cross-origin reports are not accepted');

@@ -13,6 +13,7 @@ import {
   backoffDelay,
   describeChanges,
   LIVE_ACTIVITY_CAP,
+  lifecycleAction,
   mergeEvents,
 } from './logic';
 
@@ -81,6 +82,8 @@ let source: EventSource | null = null;
 let attempt = 0;
 let retryTimer: ReturnType<typeof setTimeout> | null = null;
 let lostAnnounced = false;
+/** Closed on purpose by `pagehide`: not a lost connection, so nothing reconnects or announces. */
+let suspended = false;
 
 const queue = new AnnouncementQueue();
 let announceTimer: ReturnType<typeof setTimeout> | null = null;
@@ -136,6 +139,8 @@ function onActivity(event: MessageEvent<string>): void {
 }
 
 function onServerError(event: Event): void {
+  // A teardown during navigation is our own close, never a failure to report or retry.
+  if (suspended) return;
   // The server sends a named `error` event (with data) when it cannot build a snapshot.
   // A connection failure is a plain Event without data.
   if (event instanceof MessageEvent && typeof event.data === 'string') {
@@ -154,11 +159,17 @@ function onServerError(event: Event): void {
   scheduleReconnect();
 }
 
-function open(): void {
+/**
+ * Opens the stream. `quiet` (a resume from the back/forward cache) keeps the connection
+ * state as it was, so the indicator never flashes Reconnecting for an intentional close.
+ */
+function open({ quiet = false }: { quiet?: boolean } = {}): void {
   if (source || typeof EventSource === 'undefined') return;
   clearRetry();
-  live.connection = attempt === 0 && !live.snapshot ? 'connecting' : 'reconnecting';
-  if (attempt >= BACKOFF.disconnectedAfter) live.connection = 'disconnected';
+  if (!quiet) {
+    live.connection = attempt === 0 && !live.snapshot ? 'connecting' : 'reconnecting';
+    if (attempt >= BACKOFF.disconnectedAfter) live.connection = 'disconnected';
+  }
   const es = new EventSource(STREAM_URL);
   es.addEventListener('snapshot', onSnapshot as EventListener);
   es.addEventListener('activity', onActivity as EventListener);
@@ -175,7 +186,7 @@ function closeSource(): void {
 /** Our own backoff replaces EventSource's fixed retry, which gives up on HTTP errors. */
 function scheduleReconnect(): void {
   closeSource();
-  if (users === 0) return;
+  if (users === 0 || suspended) return;
   if (!lostAnnounced && live.connection === 'live') {
     lostAnnounced = true;
     announce(['Live updates lost. Reconnecting']);
@@ -201,7 +212,7 @@ function scheduleReconnect(): void {
 
 /** Try again now (the "Retry now" button, or the browser coming back online). */
 export function reconnectNow(): void {
-  if (users === 0) return;
+  if (users === 0 || suspended) return;
   closeSource();
   clearRetry();
   open();
@@ -212,10 +223,26 @@ function onOnline(): void {
 }
 
 function onOffline(): void {
-  if (users === 0) return;
+  if (users === 0 || suspended) return;
   closeSource();
   clearRetry();
   live.connection = 'disconnected';
+}
+
+/** `pagehide`: close the stream ourselves before the page goes (or enters the bfcache). */
+function onPageHide(event: PageTransitionEvent): void {
+  if (lifecycleAction('pagehide', event.persisted, { users, suspended }) !== 'suspend') return;
+  suspended = true;
+  clearRetry();
+  closeSource();
+}
+
+/** `pageshow` from the bfcache: reopen what `pagehide` closed, quietly, with a fresh backoff. */
+function onPageShow(event: PageTransitionEvent): void {
+  if (lifecycleAction('pageshow', event.persisted, { users, suspended }) !== 'resume') return;
+  suspended = false;
+  attempt = 0;
+  open({ quiet: true });
 }
 
 /**
@@ -227,6 +254,9 @@ export function useLive(): () => void {
   if (users === 1) {
     window.addEventListener('online', onOnline);
     window.addEventListener('offline', onOffline);
+    window.addEventListener('pagehide', onPageHide);
+    window.addEventListener('pageshow', onPageShow);
+    suspended = false;
     open();
   }
   return () => {
@@ -234,6 +264,9 @@ export function useLive(): () => void {
     if (users > 0) return;
     window.removeEventListener('online', onOnline);
     window.removeEventListener('offline', onOffline);
+    window.removeEventListener('pagehide', onPageHide);
+    window.removeEventListener('pageshow', onPageShow);
+    suspended = false;
     closeSource();
     clearRetry();
   };
