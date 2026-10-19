@@ -36,7 +36,8 @@ function logErrorRoute(context: PipelineContext, log: AppLogger): void {
   if (err !== undefined) {
     log.error('request.failed', 'Request failed before it reached the page', { ...fields, err });
   } else {
-    log.error('request.failed', 'Server error page served without an error', {
+    // No error to report (e.g. a direct GET /500): visible, but not an error of its own.
+    log.warn('request.failed', 'Server error page served without an error', {
       ...fields,
       reason: 'unhandled 5xx without an error',
     });

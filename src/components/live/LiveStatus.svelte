@@ -1,7 +1,9 @@
 <!--
   @component
   The header's live indicator and the page's polite announcer. Opens the shared stream.
-  States: connecting, live, reconnecting, disconnected (with "Retry now").
+  States: connecting, live, reconnecting, disconnected (with "Retry now"), and paused (the
+  stream was closed for a navigation that never happened while the tab was hidden; it resumes
+  when the tab is shown, or at once with "Resume").
   Hidden without JavaScript (the layout shows a static note instead).
 -->
 <script lang="ts">
@@ -16,6 +18,7 @@
     live: 'Live',
     reconnecting: 'Reconnecting',
     disconnected: 'Disconnected',
+    paused: 'Paused',
   } as const;
   /** Shorter words for narrow screens, so the header stays on one row at 360 px. */
   const SHORT = {
@@ -23,6 +26,7 @@
     live: 'Live',
     reconnecting: 'Retrying',
     disconnected: 'Offline',
+    paused: 'Paused',
   } as const;
 
   const state = $derived(live.connection);
@@ -34,7 +38,9 @@
       ? 'text-active border-active/50'
       : state === 'disconnected'
         ? 'text-fail border-fail/60'
-        : 'text-warn border-warn/50',
+        : state === 'paused'
+          ? 'text-ink-muted border-line-strong'
+          : 'text-warn border-warn/50',
   );
 </script>
 
@@ -43,7 +49,9 @@
     class="inline-flex items-center gap-1.5 rounded-full border px-2 py-1 sm:gap-2 sm:px-2.5 text-xs font-medium {tone}"
     title={state === 'live'
       ? 'Receiving live updates from the workstation'
-      : 'Live updates are not flowing; the page shows the last known state'}
+      : state === 'paused'
+        ? 'Live updates are paused; they resume when you return to this tab'
+        : 'Live updates are not flowing; the page shows the last known state'}
   >
     <span class="relative inline-flex size-2" aria-hidden="true">
       {#if state === 'live'}
@@ -51,6 +59,8 @@
         <span class="relative size-2 rounded-full bg-active"></span>
       {:else if state === 'disconnected'}
         <span class="size-2 rounded-full bg-fail"></span>
+      {:else if state === 'paused'}
+        <span class="size-2 rounded-full border border-ink-muted"></span>
       {:else}
         <span class="size-2 rounded-full border border-warn"></span>
       {/if}
@@ -69,6 +79,12 @@
       type="button"
       class="rounded-full border border-line-strong px-2 py-1 text-xs text-ink hover:border-gold hover:text-gold sm:px-2.5"
       onclick={reconnectNow}>Retry<span class="sr-only xs:not-sr-only"> now</span></button
+    >
+  {:else if state === 'paused'}
+    <button
+      type="button"
+      class="rounded-full border border-line-strong px-2 py-1 text-xs text-ink hover:border-gold hover:text-gold sm:px-2.5"
+      onclick={reconnectNow}>Resume<span class="sr-only"> live updates</span></button
     >
   {/if}
 </div>

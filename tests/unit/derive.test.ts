@@ -494,6 +494,9 @@ describe('building-stage notes (outcome: note)', () => {
   });
 });
 
+/** A fixed clock for the pardon tests (after every pardon dated in them). */
+const PARDON_NOW = Date.parse('2026-10-21T12:00:00Z');
+
 describe('pardons', () => {
   /** An audit log with a real header (parsed like the archive). */
   const log = (name: string, header: string) =>
@@ -516,7 +519,7 @@ describe('pardons', () => {
     expect(isStrikeLog(pardon.header)).toBe(false);
     expect(pardonedSlugs(pardon.header)).toEqual(['paul', 'peter']);
     expect(AUDIT_OUTCOMES).toContain('pardon');
-    const index = indexAuditLogs(audits);
+    const index = indexAuditLogs(audits, PARDON_NOW);
     expect(index.bySubject.get('paul')).toContain('limforia/audit-hall/pardon.md');
     expect(index.bySubject.get('peter')).toContain('limforia/audit-hall/pardon.md');
     // Michael wrote it (agents) but is not pardoned by it: pardons, when present, decide.
@@ -528,7 +531,7 @@ describe('pardons', () => {
   });
 
   it('covers strikes dated on or before it; later ones and other agents still count', () => {
-    const index = indexAuditLogs(audits);
+    const index = indexAuditLogs(audits, PARDON_NOW);
     // Paul: the 17th and the 18th (same day) are covered, the 19th counts.
     expect(index.strikes.get('paul')).toEqual(['limforia/audit-hall/paul-after.md']);
     // Peter: fully pardoned.
@@ -541,26 +544,123 @@ describe('pardons', () => {
     const early = log('early', 'date: 2026-10-10\nagents: [Thomas]\noutcome: pardon');
     const late = log('late', 'date: 2026-10-20\nagents: [thomas]\noutcome: pardon');
     expect(pardonedSlugs(early.header)).toEqual(['thomas']);
-    const index = indexAuditLogs([
-      { record: log('t1', 'date: 2026-10-15\noutcome: strike'), subject: 'Thomas' },
-      { record: late, subject: null },
-      { record: early, subject: null },
-    ]);
+    const index = indexAuditLogs(
+      [
+        { record: log('t1', 'date: 2026-10-15\noutcome: strike'), subject: 'Thomas' },
+        { record: late, subject: null },
+        { record: early, subject: null },
+      ],
+      PARDON_NOW,
+    );
     expect(index.pardonedAt.get('thomas')).toBe('2026-10-20');
     expect(index.strikes.get('thomas')).toBeUndefined();
     expect(index.unattributed).toEqual([]);
   });
 
-  it('never covers a strike without a valid date', () => {
-    const index = indexAuditLogs([
-      { record: log('undated', 'outcome: strike'), subject: 'Paul' },
-      { record: pardon, subject: null },
+  // Thomas MAJ-1: a pardon's date is used only when it is a real YYYY-MM-DD date, not after now.
+  it.each([
+    ['a year only', '2099'],
+    ['a letter', 'z'],
+    ['a one-digit day', '2026-10-1'],
+    ['an impossible day', '2026-02-30'],
+  ])('does not apply a pardon dated with %s, and reports it', (_name, date) => {
+    const forged = log(
+      'forged',
+      `date: "${date}"\noutcome: pardon\npardons: [Paul, Peter, Thomas]`,
+    );
+    // The header keeps no invalid date (the problem names the raw value).
+    expect(forged.header.date).toBeNull();
+    expect(forged.headerProblems).toContain(`Invalid date "${date}" (expected YYYY-MM-DD)`);
+    const index = indexAuditLogs(
+      [...audits.slice(0, 5), { record: forged, subject: null }],
+      PARDON_NOW,
+    );
+    expect(index.pardonedAt.size).toBe(0);
+    expect(index.pardons).toEqual([]);
+    // Nothing is forgiven: every strike still counts.
+    expect(index.strikes.get('paul')).toHaveLength(3);
+    expect(index.strikes.get('thomas')).toHaveLength(1);
+    expect(index.unattributed).toContain(forged.path);
+    expect(index.problems).toEqual([
+      { source: forged.path, message: 'Pardon not applied: it has no valid date (YYYY-MM-DD)' },
     ]);
+  });
+
+  it('does not forgive in advance: a valid pardon dated after now is ignored, with a problem', () => {
+    const advance = log('advance', 'date: 2099-01-01\noutcome: pardon\npardons: [Paul]');
+    expect(advance.header.date).toBe('2099-01-01');
+    const index = indexAuditLogs(
+      [...audits.slice(0, 3), { record: advance, subject: null }],
+      PARDON_NOW,
+    );
+    expect(index.pardonedAt.has('paul')).toBe(false);
+    expect(index.strikes.get('paul')).toHaveLength(3);
+    expect(index.problems).toEqual([
+      {
+        source: advance.path,
+        message: 'Pardon not applied: it is dated 2099-01-01, after today (2026-10-21)',
+      },
+    ]);
+    // The same pardon applies once its day has come.
+    const later = indexAuditLogs(
+      [...audits.slice(0, 3), { record: advance, subject: null }],
+      Date.parse('2099-01-01T08:00:00Z'),
+    );
+    expect(later.strikes.get('paul')).toBeUndefined();
+  });
+
+  it('does not apply a pardon that names nobody', () => {
+    const nobody = log('nobody', 'date: 2026-10-18\noutcome: pardon\npardons: []');
+    const index = indexAuditLogs([{ record: nobody, subject: null }], PARDON_NOW);
+    expect(index.pardons).toEqual([]);
+    expect(index.problems).toEqual([
+      { source: nobody.path, message: 'Pardon not applied: it names no agent (pardons or agents)' },
+    ]);
+  });
+
+  it('summarises each applied pardon: who, when, and how many strikes it covers', () => {
+    const index = indexAuditLogs(audits, PARDON_NOW);
+    expect(index.pardons).toEqual([
+      // Paul's 17th and 18th, and Peter's 1st: three logs. Paul's 19th is after it.
+      {
+        path: 'limforia/audit-hall/pardon.md',
+        date: '2026-10-18',
+        agents: ['paul', 'peter'],
+        covers: 3,
+      },
+    ]);
+    const check = checkStrikeCounts(
+      input({
+        roster: roster([
+          ['Paul', 'Backend', 1],
+          ['Peter', 'Tester', 0],
+          ['Thomas', 'Reviewer', 1],
+        ]),
+        strikeLogs: index.strikes,
+        pardons: index.pardons,
+      }),
+    );
+    expect(check).toEqual({
+      result: 'warn',
+      details: [
+        'limforia/audit-hall/pardon.md: pardon of paul, peter on 2026-10-18 covers 3 strike log(s)',
+      ],
+    });
+  });
+
+  it('never covers a strike without a valid date', () => {
+    const index = indexAuditLogs(
+      [
+        { record: log('undated', 'outcome: strike'), subject: 'Paul' },
+        { record: pardon, subject: null },
+      ],
+      PARDON_NOW,
+    );
     expect(index.strikes.get('paul')).toEqual(['limforia/audit-hall/undated.md']);
   });
 
   it('feeds checks 5 and 6 the post-pardon count', () => {
-    const index = indexAuditLogs(audits);
+    const index = indexAuditLogs(audits, PARDON_NOW);
     const base = {
       strikeLogs: index.strikes,
       pardonedAt: index.pardonedAt,

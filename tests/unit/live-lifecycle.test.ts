@@ -6,11 +6,7 @@
  * connection state or announcing.
  */
 import { describe, expect, it } from 'vitest';
-import {
-  CANCELLED_NAVIGATION_MS,
-  lifecycleAction,
-  resumeAfterCancelledNavigation,
-} from '../../src/ui/live/logic';
+import { CANCELLED_NAVIGATION_MS, lifecycleAction, wakeAction } from '../../src/ui/live/logic';
 
 const open = { users: 2, suspended: false };
 const suspended = { users: 2, suspended: true };
@@ -51,18 +47,41 @@ describe('beforeunload', () => {
   });
 });
 
-describe('resumeAfterCancelledNavigation', () => {
-  const base = { users: 1, suspended: true, hiddenSinceSuspend: false, visible: true };
+describe('wakeAction: a navigation that beforeunload announced but never happened', () => {
+  const waiting = {
+    users: 1,
+    suspended: true,
+    hiddenSinceSuspend: false,
+    visible: true,
+    timerPending: false,
+  };
 
-  it('reopens when the page never went away and is still shown', () => {
-    expect(resumeAfterCancelledNavigation(base)).toBe(true);
+  it('reopens when the timer fires and the tab is shown', () => {
+    expect(wakeAction('timer', waiting)).toBe('resume');
   });
 
-  it('stays closed when the page was hidden, is not visible, was already resumed or has no islands', () => {
-    expect(resumeAfterCancelledNavigation({ ...base, hiddenSinceSuspend: true })).toBe(false);
-    expect(resumeAfterCancelledNavigation({ ...base, visible: false })).toBe(false);
-    expect(resumeAfterCancelledNavigation({ ...base, suspended: false })).toBe(false);
-    expect(resumeAfterCancelledNavigation({ ...base, users: 0 })).toBe(false);
+  it('pauses, honestly, when the timer fires in a hidden tab, instead of staying closed in silence', () => {
+    expect(wakeAction('timer', { ...waiting, visible: false })).toBe('pause');
+  });
+
+  it('reopens a paused stream when the tab is shown again', () => {
+    expect(wakeAction('visible', waiting)).toBe('resume');
+  });
+
+  it('lets a running timer decide while the navigation may still happen', () => {
+    expect(wakeAction('visible', { ...waiting, timerPending: true })).toBe('none');
+  });
+
+  it('leaves a page that really went to pageshow, and does nothing without a suspend or islands', () => {
+    for (const event of ['timer', 'visible'] as const) {
+      expect(wakeAction(event, { ...waiting, hiddenSinceSuspend: true })).toBe('none');
+      expect(wakeAction(event, { ...waiting, suspended: false })).toBe('none');
+      expect(wakeAction(event, { ...waiting, users: 0 })).toBe('none');
+    }
+  });
+
+  it('never resumes a hidden tab on its own', () => {
+    expect(wakeAction('visible', { ...waiting, visible: false })).toBe('none');
   });
 
   it('waits long enough for a real navigation to hide the page', () => {

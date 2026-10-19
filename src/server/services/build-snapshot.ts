@@ -94,7 +94,7 @@ export async function buildSnapshot(deps: SnapshotDeps): Promise<Snapshot> {
   const audits = loaded
     .filter((l) => isInsideDir(l.record.path, PATHS.auditHall))
     .map((l) => ({ record: l.record, subject: auditSubject(l.text, l.record.header) }));
-  const auditIndex = indexAuditLogs(audits);
+  const auditIndex = indexAuditLogs(audits, now);
 
   const live = deriveLiveStates(eventLog.events, now, mainSlug);
   const agents = joinAgents({
@@ -125,11 +125,13 @@ export async function buildSnapshot(deps: SnapshotDeps): Promise<Snapshot> {
     strikeLogs: auditIndex.strikes,
     pardonedAt: auditIndex.pardonedAt,
     unattributedAudits: auditIndex.unattributed,
+    pardons: auditIndex.pardons,
     workstationGit: workstation,
   });
 
   const problems: SourceProblem[] = [
     ...roster.problems,
+    ...auditIndex.problems,
     ...soulBinder.problems,
     ...catalog.problems,
     ...definitions.flatMap((d) => d.problems.map((message) => ({ source: d.file, message }))),

@@ -2,6 +2,7 @@ import type {
   ArchiveRecord,
   CatalogEntry,
   RecordHeader,
+  SourceProblem,
   WingId,
   WingSummary,
 } from '../../shared/types';
@@ -9,6 +10,7 @@ import { wingTitle } from '../../shared/wings';
 import { PATHS } from '../constants';
 import type { RawCatalogEntry } from '../sources/parse/registers';
 import { toStringList } from '../sources/parse/frontmatter';
+import { isIsoDate } from '../sources/parse/record';
 import { slugOf } from './agents';
 
 export interface WingFolder {
@@ -89,6 +91,17 @@ export function pardonedSlugs(header: RecordHeader): string[] {
   );
 }
 
+export interface PardonSummary {
+  /** The pardon record. */
+  path: string;
+  /** `YYYY-MM-DD`. */
+  date: string;
+  /** Slugs it pardons. */
+  agents: string[];
+  /** Strike logs of those agents dated on or before it (what it forgives). */
+  covers: number;
+}
+
 export interface AuditIndex {
   /** Every audit log about an agent, keyed by slug (for the agent pages); pardons included. */
   bySubject: Map<string, string[]>;
@@ -96,21 +109,37 @@ export interface AuditIndex {
   strikes: Map<string, string[]>;
   /** Each pardoned agent's latest pardon date (`YYYY-MM-DD`). */
   pardonedAt: Map<string, string>;
+  /** Every pardon that was applied, so the compliance view can show each one. */
+  pardons: PardonSummary[];
   unattributed: string[];
+  /** Pardons that were not applied, and why (invalid date, no agents, dated in the future). */
+  problems: SourceProblem[];
+}
+
+/** A header date usable for comparison: a real `YYYY-MM-DD` date, else `null`. */
+function validDate(date: string | null): string | null {
+  return date !== null && isIsoDate(date) ? date : null;
 }
 
 /**
  * Groups audit-hall records by the agent they are about, and applies pardons: a strike log
- * dated on or before the agent's latest pardon no longer counts. A strike log without a
- * valid date always counts (it cannot be shown to be covered).
+ * dated ON OR BEFORE the agent's latest pardon no longer counts.
+ * - Only real `YYYY-MM-DD` dates are compared. A strike without one always counts (it cannot
+ *   be shown to be covered). A pardon without one, or naming nobody, is not applied: it is
+ *   unattributed and reported as a problem.
+ * - A pardon dated after `now` is not applied (it cannot forgive in advance), with a problem.
  */
 export function indexAuditLogs(
   audits: { record: ArchiveRecord; subject: string | null }[],
+  now: number = Date.now(),
 ): AuditIndex {
+  const today = new Date(now).toISOString().slice(0, 10);
   const bySubject = new Map<string, string[]>();
   const pardonedAt = new Map<string, string>();
+  const applied: { path: string; date: string; agents: string[] }[] = [];
   const strikeLogs: { slug: string; path: string; date: string | null }[] = [];
   const unattributed: string[] = [];
+  const problems: SourceProblem[] = [];
   const push = (map: Map<string, string[]>, key: string, path: string) => {
     if (!(map.get(key) ?? []).includes(path)) map.set(key, [...(map.get(key) ?? []), path]);
   };
@@ -119,14 +148,30 @@ export function indexAuditLogs(
     const { header } = record;
     if (isPardonLog(header)) {
       const slugs = pardonedSlugs(header);
-      if (slugs.length === 0 || header.date === null) {
+      const date = validDate(header.date);
+      if (slugs.length === 0 || date === null) {
         unattributed.push(record.path);
+        problems.push({
+          source: record.path,
+          message:
+            date === null
+              ? 'Pardon not applied: it has no valid date (YYYY-MM-DD)'
+              : 'Pardon not applied: it names no agent (pardons or agents)',
+        });
         continue;
       }
+      if (date > today) {
+        problems.push({
+          source: record.path,
+          message: `Pardon not applied: it is dated ${date}, after today (${today})`,
+        });
+        continue;
+      }
+      applied.push({ path: record.path, date, agents: slugs });
       for (const slug of slugs) {
         push(bySubject, slug, record.path);
         const latest = pardonedAt.get(slug);
-        if (latest === undefined || header.date > latest) pardonedAt.set(slug, header.date);
+        if (latest === undefined || date > latest) pardonedAt.set(slug, date);
       }
       continue;
     }
@@ -136,15 +181,25 @@ export function indexAuditLogs(
     }
     const slug = slugOf(subject);
     push(bySubject, slug, record.path);
-    if (isStrikeLog(header)) strikeLogs.push({ slug, path: record.path, date: header.date });
+    if (isStrikeLog(header)) {
+      strikeLogs.push({ slug, path: record.path, date: validDate(header.date) });
+    }
   }
 
   const strikes = new Map<string, string[]>();
   for (const { slug, path, date } of strikeLogs) {
     const pardon = pardonedAt.get(slug);
-    // ISO dates compare as strings. "On or before the pardon's date" is covered.
+    // Real ISO dates compare correctly as strings. "On or before the pardon's date" is covered.
     const covered = pardon !== undefined && date !== null && date <= pardon;
     if (!covered) push(strikes, slug, path);
   }
-  return { bySubject, strikes, pardonedAt, unattributed };
+  const pardons = applied.map(({ path, date, agents }) => ({
+    path,
+    date,
+    agents,
+    covers: strikeLogs.filter((s) => agents.includes(s.slug) && s.date !== null && s.date <= date)
+      .length,
+  }));
+  return { bySubject, strikes, pardonedAt, pardons, unattributed, problems };
 }
+

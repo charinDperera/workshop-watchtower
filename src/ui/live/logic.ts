@@ -96,17 +96,37 @@ export function lifecycleAction(
  */
 export const CANCELLED_NAVIGATION_MS = 2_000;
 
-/**
- * After `beforeunload` suspended the stream: reopen it only if the page never went away
- * (no `pagehide` since) and is still shown, and islands still use the stream.
- */
-export function resumeAfterCancelledNavigation(state: {
+export interface SuspendState {
+  /** Islands sharing the stream. */
   users: number;
+  /** The stream was closed on purpose (`beforeunload` or `pagehide`). */
   suspended: boolean;
+  /** `pagehide` fired since the suspend: the page really went (or is in the bfcache). */
   hiddenSinceSuspend: boolean;
+  /** The tab is shown (`document.visibilityState === 'visible'`). */
   visible: boolean;
-}): boolean {
-  return state.users > 0 && state.suspended && !state.hiddenSinceSuspend && state.visible;
+  /** The `CANCELLED_NAVIGATION_MS` timer is still running. */
+  timerPending: boolean;
+}
+
+/**
+ * What wakes a stream that `beforeunload` suspended but the page never left:
+ *
+ * - `timer` (`CANCELLED_NAVIGATION_MS` after `beforeunload`): the navigation was cancelled
+ *   (a download or mailto link). Reopen if the tab is shown; if it is hidden, `pause`: say so
+ *   honestly in the indicator, and wait to be shown.
+ * - `visible` (`visibilitychange` to shown): reopen a stream still suspended after the timer.
+ *
+ * A page that really went (`pagehide` since) is left to `pageshow`. A user's "Retry now"
+ * always wins and is handled by the store directly.
+ */
+export function wakeAction(
+  event: 'timer' | 'visible',
+  state: SuspendState,
+): 'resume' | 'pause' | 'none' {
+  if (state.users === 0 || !state.suspended || state.hiddenSinceSuspend) return 'none';
+  if (event === 'timer') return state.visible ? 'resume' : 'pause';
+  return state.visible && !state.timerPending ? 'resume' : 'none';
 }
 
 /* ------------------------------------------------------------------ */

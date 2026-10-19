@@ -7,7 +7,7 @@
 // Rules: unset or empty means "use the default"; every problem names the variable and
 // says what is wrong, but never echoes the value; any problem stops the server.
 
-import { existsSync, readFileSync, statSync } from 'node:fs';
+import { existsSync, readFileSync, realpathSync, statSync } from 'node:fs';
 import { BlockList, isIP } from 'node:net';
 import { dirname, isAbsolute, join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -82,11 +82,52 @@ export function appDir(moduleUrl = import.meta.url) {
   );
 }
 
+/** Case-folded on Windows (paths there are case-insensitive), resolved, no trailing separator. */
+function normPath(p) {
+  const r = resolve(p);
+  return process.platform === 'win32' ? r.toLowerCase() : r;
+}
+
+/** True when `child` is strictly inside `parent` (not equal to it). */
+function strictlyInside(child, parent) {
+  const rel = relative(normPath(parent), normPath(child));
+  return rel !== '' && !rel.startsWith('..') && !isAbsolute(rel);
+}
+
+/**
+ * Where `p` really is: the realpath of its deepest existing ancestor, with the part that does
+ * not exist yet joined back on. So a junction or symlink anywhere on the way is followed.
+ */
+function realLocation(p) {
+  let existing = resolve(p);
+  const rest = [];
+  while (!existsSync(existing)) {
+    const parent = dirname(existing);
+    if (parent === existing) break;
+    rest.unshift(existing.slice(parent.length).replace(/^[\\/]/, ''));
+    existing = parent;
+  }
+  let real;
+  try {
+    real = realpathSync.native(existing);
+  } catch {
+    real = existing;
+  }
+  return rest.length > 0 ? join(real, ...rest) : real;
+}
+
+/** The only allowed build folders: exactly `<app>/dist`, or strictly inside `<app>/.local`. */
+function isAllowedDist(dir, app) {
+  return normPath(dir) === normPath(join(app, 'dist')) || strictlyInside(dir, join(app, '.local'));
+}
+
 /**
  * WATCHTOWER_DIST_DIR: where `astro build` writes and `scripts/start.mjs` serves from
- * (`<dir>/server/entry.mjs`, `<dir>/client/`). Relative paths resolve against the app
- * folder, so the build, the server and Playwright agree whatever their working directory.
- * Default: `<app>/dist`. Read on its own by astro.config.mjs (a build needs no workstation)
+ * (`<dir>/server/entry.mjs`, `<dir>/client/`). `astro build` EMPTIES this folder, so it is an
+ * allowlist: exactly `<app>/dist` (the default), or a folder strictly inside `<app>/.local/`
+ * (e.g. `.local/peter/e2e/dist`). Relative paths resolve against the app folder. The check
+ * runs on the path as written and on where it really leads (junctions and symlinks followed),
+ * case-folded on Windows. Read on its own by astro.config.mjs (a build needs no workstation)
  * and as part of `readServerEnv`; this is the one parser of the variable.
  * @param {Record<string, string | undefined>} env
  */
@@ -94,21 +135,18 @@ export function readDistDir(env, moduleUrl = import.meta.url) {
   const raw = typeof env.WATCHTOWER_DIST_DIR === 'string' ? env.WATCHTOWER_DIST_DIR.trim() : '';
   const app = appDir(moduleUrl);
   if (raw === '') return join(app, 'dist');
-  if (raw.includes('\0')) {
-    throw new ServerEnvError([
-      { variable: 'WATCHTOWER_DIST_DIR', problem: 'must be a folder path' },
-    ]);
-  }
-  const dir = isAbsolute(raw) ? raw : resolve(app, raw);
-  if (isSameOrAncestor(dir, app)) {
-    // astro build empties outDir: never the app folder itself or anything above it.
-    throw new ServerEnvError([
+  const refuse = () =>
+    new ServerEnvError([
       {
         variable: 'WATCHTOWER_DIST_DIR',
-        problem: 'must not be the app folder or a folder above it',
+        problem: "must be the app's dist folder or a folder inside its .local folder",
       },
     ]);
-  }
+  if (raw.includes('\0')) throw refuse();
+  const dir = isAbsolute(raw) ? resolve(raw) : resolve(app, raw);
+  if (!isAllowedDist(dir, app)) throw refuse();
+  // Where it really leads, against where the app really is.
+  if (!isAllowedDist(realLocation(dir), realLocation(app))) throw refuse();
   return dir;
 }
 

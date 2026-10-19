@@ -14,6 +14,7 @@ import type {
   RosterEntry,
 } from '../../shared/types';
 import { findMainSlug, slugOf } from './agents';
+import type { PardonSummary } from './archive';
 
 export interface ComplianceInput {
   roster: RosterEntry[];
@@ -30,6 +31,8 @@ export interface ComplianceInput {
   pardonedAt?: Map<string, string>;
   /** Audit logs whose subject agent could not be determined. */
   unattributedAudits: string[];
+  /** The pardons that were applied: each one is shown as a warning, so none can hide. */
+  pardons?: readonly PardonSummary[];
   workstationGit: RepoState;
 }
 
@@ -142,6 +145,12 @@ export function checkStrikeCounts(input: ComplianceInput): CheckBody {
   const warns = input.unattributedAudits.map(
     (path) => `${path}: cannot tell which agent it is about`,
   );
+  // Pardons change what counts, so every one is visible (a forged pardon cannot hide).
+  for (const pardon of input.pardons ?? []) {
+    warns.push(
+      `${pardon.path}: pardon of ${pardon.agents.join(', ')} on ${pardon.date} covers ${pardon.covers} strike log(s)`,
+    );
+  }
   return verdict(fails, warns);
 }
 

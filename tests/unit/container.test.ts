@@ -5,6 +5,7 @@ import {
   mkdirSync,
   readFileSync,
   rmSync,
+  symlinkSync,
   utimesSync,
   writeFileSync,
 } from 'node:fs';
@@ -395,14 +396,66 @@ describe('WATCHTOWER_DIST_DIR (a separate build per user, e.g. e2e)', () => {
     }
   });
 
-  it('refuses the app folder or anything above it (astro build empties outDir)', () => {
-    for (const value of ['.', '..', APP_DIR, join(APP_DIR, '..', '..')]) {
-      const result = loadEnv({ WATCHTOWER_DIST_DIR: value });
-      expect(result.ok).toBe(false);
-      if (!result.ok) {
-        expect(result.variables).toEqual(['WATCHTOWER_DIST_DIR']);
-        expect(result.error).toContain('must not be the app folder or a folder above it');
+  // Thomas MAJ-2: astro build EMPTIES outDir, so only <app>/dist or a folder inside .local.
+  it.each([
+    ['.', '.'],
+    ['..', '..'],
+    ['the app folder', APP_DIR],
+    ['the workstation', join(APP_DIR, '..', '..')],
+    ['src', 'src'],
+    ['node_modules', 'node_modules'],
+    ['scripts', 'scripts'],
+    ['the archive (relative)', '../../limforia'],
+    ['the archive (absolute)', 'F:/Projects/limforia'],
+    ['.local itself', '.local'],
+    ['a folder inside dist', 'dist/sub'],
+    ['an escape through ..', '.local/../src'],
+    ['a sibling named like .local', '.localx/dist'],
+  ])('refuses %s', (_name, value) => {
+    const result = loadEnv({ WATCHTOWER_DIST_DIR: value });
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.variables).toEqual(['WATCHTOWER_DIST_DIR']);
+      expect(result.error).toContain(
+        "must be the app's dist folder or a folder inside its .local folder",
+      );
+    }
+  });
+
+  it.each([
+    ['the default', 'dist', join(APP_DIR, 'dist')],
+    ['the e2e build', '.local/peter/e2e/dist', join(APP_DIR, '.local', 'peter', 'e2e', 'dist')],
+    [
+      'an absolute path inside .local',
+      join(APP_DIR, '.local', 'paul', 'dist'),
+      join(APP_DIR, '.local', 'paul', 'dist'),
+    ],
+  ])('accepts %s', (_name, value, expected) => {
+    expect(readDistDir({ WATCHTOWER_DIST_DIR: value })).toBe(expected);
+  });
+
+  it('refuses a path inside .local that a junction leads outside it', () => {
+    const temp = makeTempDir('junction-');
+    // The junction's target: a throwaway folder in the app, outside .local.
+    const outside = join(APP_DIR, `.junction-target-${process.pid}`);
+    mkdirSync(outside, { recursive: true });
+    try {
+      const link = join(temp.dir, 'link');
+      try {
+        symlinkSync(outside, link, 'junction');
+      } catch {
+        return; // No junction or symlink support here: the lexical checks above still hold.
       }
+      expect(() => readDistDir({ WATCHTOWER_DIST_DIR: join(link, 'dist') })).toThrow(
+        "must be the app's dist folder or a folder inside its .local folder",
+      );
+      // The same place without the junction is fine.
+      expect(readDistDir({ WATCHTOWER_DIST_DIR: join(temp.dir, 'dist') })).toBe(
+        join(temp.dir, 'dist'),
+      );
+    } finally {
+      temp.cleanup();
+      rmSync(outside, { recursive: true, force: true });
     }
   });
 });

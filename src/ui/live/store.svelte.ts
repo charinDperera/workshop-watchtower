@@ -16,10 +16,14 @@ import {
   LIVE_ACTIVITY_CAP,
   lifecycleAction,
   mergeEvents,
-  resumeAfterCancelledNavigation,
+  wakeAction,
 } from './logic';
 
-export type ConnectionState = 'connecting' | 'live' | 'reconnecting' | 'disconnected';
+/**
+ * `paused`: the stream was closed on purpose for a navigation that never happened, while the
+ * tab was hidden. It reopens when the tab is shown again, or at once on "Retry now".
+ */
+export type ConnectionState = 'connecting' | 'live' | 'reconnecting' | 'disconnected' | 'paused';
 
 export const STREAM_URL = '/api/stream';
 
@@ -219,15 +223,26 @@ function scheduleReconnect(): void {
   }, delay);
 }
 
-/** Try again now (the "Retry now" button, or the browser coming back online). */
+/**
+ * "Retry now": a user action always wins, so it also ends an intentional suspend (a paused
+ * stream, or one waiting out a cancelled navigation).
+ */
 export function reconnectNow(): void {
-  if (users === 0 || suspended) return;
+  if (users === 0) return;
+  if (suspended) {
+    clearCancelTimer();
+    suspended = false;
+    hiddenSinceSuspend = false;
+    attempt = 0;
+  }
   closeSource();
   clearRetry();
   open();
 }
 
+/** Back online: retry, unless the stream is closed on purpose (a navigation is under way). */
 function onOnline(): void {
+  if (suspended) return;
   reconnectNow();
 }
 
@@ -270,11 +285,34 @@ function onBeforeUnload(): void {
   clearCancelTimer();
   cancelTimer = setTimeout(() => {
     cancelTimer = null;
-    const visible = document.visibilityState === 'visible';
-    if (resumeAfterCancelledNavigation({ users, suspended, hiddenSinceSuspend, visible })) {
-      resume();
-    }
+    wake('timer');
   }, CANCELLED_NAVIGATION_MS);
+}
+
+/** The state `wakeAction` decides on. */
+function suspendState() {
+  return {
+    users,
+    suspended,
+    hiddenSinceSuspend,
+    visible: document.visibilityState === 'visible',
+    timerPending: cancelTimer !== null,
+  };
+}
+
+/**
+ * After a cancelled navigation: reopen if the tab is shown; if it is hidden, the indicator
+ * says Paused (never Live for a closed stream) until the tab is shown. Nothing is announced.
+ */
+function wake(event: 'timer' | 'visible'): void {
+  const action = wakeAction(event, suspendState());
+  if (action === 'resume') resume();
+  else if (action === 'pause') live.connection = 'paused';
+}
+
+/** The tab is shown again: wake a stream still paused by a cancelled navigation. */
+function onVisibilityChange(): void {
+  if (document.visibilityState === 'visible') wake('visible');
 }
 
 /** `pagehide`: the page goes (or enters the bfcache). Close the stream if still open. */
@@ -303,6 +341,7 @@ export function useLive(): () => void {
     window.addEventListener('beforeunload', onBeforeUnload);
     window.addEventListener('pagehide', onPageHide);
     window.addEventListener('pageshow', onPageShow);
+    document.addEventListener('visibilitychange', onVisibilityChange);
     suspended = false;
     hiddenSinceSuspend = false;
     open();
@@ -315,6 +354,7 @@ export function useLive(): () => void {
     window.removeEventListener('beforeunload', onBeforeUnload);
     window.removeEventListener('pagehide', onPageHide);
     window.removeEventListener('pageshow', onPageShow);
+    document.removeEventListener('visibilitychange', onVisibilityChange);
     clearCancelTimer();
     suspended = false;
     hiddenSinceSuspend = false;

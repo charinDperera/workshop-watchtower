@@ -55,10 +55,13 @@ export function validateHeader(data: Record<string, unknown>): {
   if ('type' in data && (type === null || !(RECORD_TYPES as readonly string[]).includes(type))) {
     problems.push(`Unknown type "${type ?? ''}"`);
   }
-  const date = toOptionalString(data.date);
-  if ('date' in data && (date === null || !isIsoDate(date))) {
-    problems.push(`Invalid date "${date ?? ''}" (expected YYYY-MM-DD)`);
+  const rawDate = toOptionalString(data.date);
+  if ('date' in data && (rawDate === null || !isIsoDate(rawDate))) {
+    problems.push(`Invalid date "${rawDate ?? ''}" (expected YYYY-MM-DD)`);
   }
+  // Only a real YYYY-MM-DD date is kept: nothing downstream (pardons, sorting, <time>) may
+  // compare an invalid one. The problem above still names the raw value.
+  const date = rawDate !== null && isIsoDate(rawDate) ? rawDate : null;
   const status = toOptionalString(data.status);
   if (
     'status' in data &&
