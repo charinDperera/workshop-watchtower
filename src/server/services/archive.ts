@@ -150,7 +150,6 @@ export function indexAuditLogs(
       const slugs = pardonedSlugs(header);
       const date = validDate(header.date);
       if (slugs.length === 0 || date === null) {
-        unattributed.push(record.path);
         problems.push({
           source: record.path,
           message:

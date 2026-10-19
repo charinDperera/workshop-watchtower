@@ -3,6 +3,7 @@
  * pure function over already-parsed data, so each can be tested on its own.
  */
 import type {
+  SourceProblem,
   AgentDefinition,
   ArchiveRecord,
   CatalogEntry,
@@ -31,16 +32,22 @@ export interface ComplianceInput {
   pardonedAt?: Map<string, string>;
   /** Audit logs whose subject agent could not be determined. */
   unattributedAudits: string[];
-  /** The pardons that were applied: each one is shown as a warning, so none can hide. */
+  /** The pardons that were applied: each is listed in check 5's details, so none can hide. */
   pardons?: readonly PardonSummary[];
+  /** Pardons that were NOT applied, with the reason (invalid or future date, nobody named). */
+  pardonProblems?: readonly SourceProblem[];
   workstationGit: RepoState;
 }
 
 type CheckBody = Pick<ComplianceCheck, 'result' | 'details'>;
 
-function verdict(fails: string[], warns: string[] = []): CheckBody {
+/**
+ * A check's result from its findings. `notes` are shown with the details but never change
+ * the result (e.g. a valid, applied pardon: visible, yet nothing is wrong).
+ */
+function verdict(fails: string[], warns: string[] = [], notes: string[] = []): CheckBody {
   const result: CheckResult = fails.length > 0 ? 'fail' : warns.length > 0 ? 'warn' : 'pass';
-  return { result, details: [...fails, ...warns] };
+  return { result, details: [...fails, ...warns, ...notes] };
 }
 
 /** Check 1 (C2): definitions and roster entries match one to one, except the main agent. */
@@ -145,13 +152,15 @@ export function checkStrikeCounts(input: ComplianceInput): CheckBody {
   const warns = input.unattributedAudits.map(
     (path) => `${path}: cannot tell which agent it is about`,
   );
-  // Pardons change what counts, so every one is visible (a forged pardon cannot hide).
-  for (const pardon of input.pardons ?? []) {
-    warns.push(
+  // A pardon that was not applied is a warning, with its reason.
+  for (const problem of input.pardonProblems ?? [])
+    warns.push(`${problem.source}: ${problem.message}`);
+  // Every applied pardon is listed, so none can hide; a valid pardon alone is no warning.
+  const notes = (input.pardons ?? []).map(
+    (pardon) =>
       `${pardon.path}: pardon of ${pardon.agents.join(', ')} on ${pardon.date} covers ${pardon.covers} strike log(s)`,
-    );
-  }
-  return verdict(fails, warns);
+  );
+  return verdict(fails, warns, notes);
 }
 
 /**

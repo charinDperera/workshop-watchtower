@@ -185,14 +185,14 @@ describe('snapshot of the broken fixture workstation', async () => {
 });
 
 describe('snapshot of the clean fixture workstation', () => {
-  it('passes every check except the git warning and the visible pardon', async () => {
+  it('passes every check except the git warning, and lists the pardon', async () => {
     const snapshot = await buildSnapshot({
       fs: createWorkstationFs(CLEAN_FIXTURE),
       git: noGit,
       now: NOW,
     });
-    // Two warnings: the git state, and check 5 showing the one pardon (pardons never hide).
-    expect(snapshot.compliance).toMatchObject({ pass: 5, warn: 2, fail: 0 });
+    // One warning, the git state. Check 5 passes, and still lists the pardon (see below).
+    expect(snapshot.compliance).toMatchObject({ pass: 6, warn: 1, fail: 0 });
     expect(snapshot.problems).toEqual([]);
     // Its roster is the legacy 5-column format: still read, Overseer inferred from the role.
     expect(snapshot.agents.map((a) => [a.slug, a.rank, a.isMain, a.title, a.station])).toEqual([
@@ -201,8 +201,8 @@ describe('snapshot of the clean fixture workstation', () => {
     ]);
     expect(snapshot.pipeline).toEqual([]);
     expect(snapshot.activity).toEqual({ events: [], total: 0, skippedLines: 0 });
-    // A strike for Paul, then a pardon of Paul: the roster's 0 / 3 is right. Check 5 only
-    // warns, to show the pardon; check 6 passes.
+    // A strike for Paul, then a pardon of Paul: the roster's 0 / 3 is right. Check 5 passes
+    // and lists the pardon in its details; check 6 passes.
     const paul = snapshot.agents.find((a) => a.slug === 'paul');
     expect(paul).toMatchObject({ strikes: 0, pardonedAt: '2026-09-30' });
     expect(paul?.auditLogs).toEqual([
@@ -211,7 +211,7 @@ describe('snapshot of the clean fixture workstation', () => {
     ]);
     const check = (id: string) => snapshot.compliance.checks.find((c) => c.id === id);
     expect(check('strike-counts')).toMatchObject({
-      result: 'warn',
+      result: 'pass',
       details: [
         'limforia/audit-hall/2026-09-30-pardon.md: pardon of paul on 2026-09-30 covers 1 strike log(s)',
       ],

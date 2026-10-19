@@ -107,9 +107,12 @@ How the container is set up (`Dockerfile`, `compose.yaml`):
   counts (it cannot be shown to be covered). A pardon without one, or naming nobody, is not
   applied and is reported as a problem. A pardon dated after today is not applied either
   (it cannot forgive in advance), and is reported.
-- **Check 5** compares each roster count with the strike logs that still count, and shows
-  every applied pardon as a warning (its record, whom it pardons, how many strike logs it
-  covers), so no pardon is invisible. **Check 6** uses the same count.
+- **Check 5** compares each roster count with the strike logs that still count. It passes
+  when they agree and fails when they do not. Either way its details list every applied
+  pardon (its record, whom it pardons, its date, how many strike logs it covers), so no
+  pardon is invisible; a valid pardon alone does not make the check warn. A pardon that was
+  NOT applied (no valid date, dated in the future, naming nobody) is a warning with its
+  reason. **Check 6** uses the same count.
 
 ## Configuration (ADR-006)
 

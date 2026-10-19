@@ -126,6 +126,7 @@ export async function buildSnapshot(deps: SnapshotDeps): Promise<Snapshot> {
     pardonedAt: auditIndex.pardonedAt,
     unattributedAudits: auditIndex.unattributed,
     pardons: auditIndex.pardons,
+    pardonProblems: auditIndex.problems,
     workstationGit: workstation,
   });
 

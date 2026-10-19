@@ -580,7 +580,25 @@ describe('pardons', () => {
     // Nothing is forgiven: every strike still counts.
     expect(index.strikes.get('paul')).toHaveLength(3);
     expect(index.strikes.get('thomas')).toHaveLength(1);
-    expect(index.unattributed).toContain(forged.path);
+    // Reported once, as an unapplied pardon (with its reason), not as "unattributed".
+    expect(index.unattributed).not.toContain(forged.path);
+    // The roster matches the audit hall (nothing was forgiven), so only the warning remains.
+    const check = checkStrikeCounts(
+      input({
+        roster: roster([
+          ['Paul', 'Backend', 3],
+          ['Peter', 'Tester', 1],
+          ['Thomas', 'Reviewer', 1],
+        ]),
+        strikeLogs: index.strikes,
+        pardons: index.pardons,
+        pardonProblems: index.problems,
+      }),
+    );
+    expect(check.result).toBe('warn');
+    expect(check.details).toContain(
+      `${forged.path}: Pardon not applied: it has no valid date (YYYY-MM-DD)`,
+    );
     expect(index.problems).toEqual([
       { source: forged.path, message: 'Pardon not applied: it has no valid date (YYYY-MM-DD)' },
     ]);
@@ -640,10 +658,62 @@ describe('pardons', () => {
         pardons: index.pardons,
       }),
     );
+    // Counts agree: a PASS, with every applied pardon still listed in the details.
+    expect(check).toEqual({
+      result: 'pass',
+      details: [
+        'limforia/audit-hall/pardon.md: pardon of paul, peter on 2026-10-18 covers 3 strike log(s)',
+      ],
+    });
+  });
+
+  it('check 5: a mismatch still fails, and lists the pardon after the failure', () => {
+    const index = indexAuditLogs(audits, PARDON_NOW);
+    const check = checkStrikeCounts(
+      input({
+        roster: roster([
+          ['Paul', 'Backend', 0],
+          ['Peter', 'Tester', 0],
+          ['Thomas', 'Reviewer', 1],
+        ]),
+        strikeLogs: index.strikes,
+        pardonedAt: index.pardonedAt,
+        pardons: index.pardons,
+      }),
+    );
+    expect(check).toEqual({
+      result: 'fail',
+      details: [
+        'Paul: roster says 0, audit hall holds 1 after the pardon of 2026-10-18',
+        'limforia/audit-hall/pardon.md: pardon of paul, peter on 2026-10-18 covers 3 strike log(s)',
+      ],
+    });
+  });
+
+  it('check 5: an unapplied pardon (future, or naming nobody) is a warning with its reason', () => {
+    const advance = log('advance', 'date: 2099-01-01\noutcome: pardon\npardons: [Thomas]');
+    const nobody = log('nobody', 'date: 2026-10-18\noutcome: pardon\npardons: []');
+    const index = indexAuditLogs(
+      [
+        audits[4] as (typeof audits)[number],
+        { record: advance, subject: null },
+        { record: nobody, subject: null },
+      ],
+      PARDON_NOW,
+    );
+    const check = checkStrikeCounts(
+      input({
+        roster: roster([['Thomas', 'Reviewer', 1]]),
+        strikeLogs: index.strikes,
+        pardons: index.pardons,
+        pardonProblems: index.problems,
+      }),
+    );
     expect(check).toEqual({
       result: 'warn',
       details: [
-        'limforia/audit-hall/pardon.md: pardon of paul, peter on 2026-10-18 covers 3 strike log(s)',
+        'limforia/audit-hall/advance.md: Pardon not applied: it is dated 2099-01-01, after today (2026-10-21)',
+        'limforia/audit-hall/nobody.md: Pardon not applied: it names no agent (pardons or agents)',
       ],
     });
   });
