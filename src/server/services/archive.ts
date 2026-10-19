@@ -202,4 +202,3 @@ export function indexAuditLogs(
   }));
   return { bySubject, strikes, pardonedAt, pardons, unattributed, problems };
 }
-

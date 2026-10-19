@@ -110,7 +110,9 @@ describe('an error Astro handles before any middleware (e.g. a page module fails
   it('logs a fallback only when no error object reached the page (a direct GET /500)', async () => {
     calls.length = 0;
     await handleRequest(errorRoute({}), page500, { rethrowRenderErrors: false });
-    expect(calls.filter((c) => c.level === 'error')).toMatchObject([
+    // A warning, not an error: nothing failed that could be reported (Thomas NIT-2).
+    expect(calls.filter((c) => c.level === 'error')).toEqual([]);
+    expect(calls.filter((c) => c.level === 'warn')).toMatchObject([
       {
         event: 'request.failed',
         fields: { status: 500, reason: 'unhandled 5xx without an error' },

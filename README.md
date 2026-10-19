@@ -92,6 +92,25 @@ How the container is set up (`Dockerfile`, `compose.yaml`):
   debounced and never re-sent unchanged, and the only clients are the gateway and a local
   browser. The logic takes effect once Astro honours backpressure.
 
+## Strikes and pardons (compliance checks 5 and 6)
+
+- **Strike logs.** An audit log in `limforia/audit-hall/` counts as a strike for the agent it
+  is about when its `outcome` is `strike`, `executed`, or missing. `dismissed` and `note`
+  (an error recorded during the building stage) never count.
+- **Pardons.** An audit log with `outcome: pardon` forgives earlier strikes of the agents it
+  names in `pardons` (or, without that key, in `agents`), matched case-insensitively. It is
+  never a strike itself.
+- **The date rule: a pardon covers every strike log dated ON OR BEFORE the pardon's date.**
+  A strike on the same day as the pardon is forgiven; one dated the next day counts. Only
+  the agent's latest pardon matters.
+- **Only real dates count.** Dates must be valid `YYYY-MM-DD`. A strike without one always
+  counts (it cannot be shown to be covered). A pardon without one, or naming nobody, is not
+  applied and is reported as a problem. A pardon dated after today is not applied either
+  (it cannot forgive in advance), and is reported.
+- **Check 5** compares each roster count with the strike logs that still count, and shows
+  every applied pardon as a warning (its record, whom it pardons, how many strike logs it
+  covers), so no pardon is invisible. **Check 6** uses the same count.
+
 ## Configuration (ADR-006)
 
 Every variable is listed and documented in `.env.example`; all are optional. The app
